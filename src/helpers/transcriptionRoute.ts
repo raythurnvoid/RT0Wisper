@@ -197,7 +197,7 @@ export function resolveByokModel(provider: string, configuredModel?: string): st
   }
   if (provider === "groq") return "whisper-large-v3-turbo";
   if (provider === "xai") return "grok-stt";
-  if (provider === "mistral") return "voxtral-mini-latest";
+  if (provider === "mistral") return "voxtral-mini-transcribe-3-0";
   if (provider === "corti") return "corti-transcribe";
   if (provider === "gemini") return "gemini-3.5-transcribe";
   if (provider === "deepgram") return "nova-3";

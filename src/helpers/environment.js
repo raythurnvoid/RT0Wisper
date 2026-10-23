@@ -22,6 +22,10 @@ const SECRET_KEYS = [
 
 const SECRET_KEY_SET = new Set(SECRET_KEYS);
 
+// Taken before any .env loads. A key set in the system environment stays there:
+// copying it into the encrypted store would hide a later change to it.
+const SYSTEM_ENV = { ...process.env };
+
 const PERSISTED_KEYS = [
   ...SECRET_KEYS,
   "LOCAL_TRANSCRIPTION_PROVIDER",
@@ -191,7 +195,7 @@ class EnvironmentManager {
     try {
       for (const name of SECRET_KEYS) {
         const value = process.env[name];
-        if (!value) continue;
+        if (!value || value === SYSTEM_ENV[name]) continue;
         await this._saveSecretKey(name, value);
         // Round-trip verify before stripping plaintext .env.
         const buffer = await fsPromises.readFile(this._getSecretFilePath(name));

@@ -31,6 +31,7 @@ const APP_CATEGORY_INSTRUCTIONS: Partial<Record<ToneAppCategory, string>> = {
   work: "The text is a work chat message.",
   email:
     "The text is an email. Keep a dictated greeting, paragraphs and sign-off on their own lines, and never add a greeting or sign-off that was not dictated.",
+  code: "The text goes into a code editor, a terminal or an AI coding assistant, usually as a prompt, a commit message or a code comment. Write spoken code names in their code form (camelCase, snake_case, file names with extensions, paths, flags, commands and URLs) and wrap each in backticks. Keep technical terms and product names exactly. Add no headings, lists or other formatting that was not dictated.",
 };
 
 const TONE_PRIORITY_INSTRUCTION =
@@ -70,6 +71,12 @@ const WRITING_KINDS: Record<
     examples: "any email, including an email_draft body",
     style: "email",
     destination: "an email app",
+  },
+  code: {
+    label: "Code and AI prompts",
+    examples: "code editors, terminals, AI coding assistants",
+    style: "developer",
+    destination: "a code editor, terminal or AI coding assistant",
   },
   other: {
     label: "Everything else",

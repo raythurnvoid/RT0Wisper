@@ -2,7 +2,9 @@ const { autoUpdater } = require("electron-updater");
 
 // electron-updater can only replace an AppImage on Linux; deb, rpm and tar.gz
 // installs are updated by the package manager instead.
-const isUpdaterSupported = process.platform !== "linux" || Boolean(process.env.APPIMAGE);
+// Off in this fork: the update feed is upstream OpenWhispr's, so an update would
+// replace this build with theirs.
+const isUpdaterSupported = false;
 
 class UpdateManager {
   constructor() {

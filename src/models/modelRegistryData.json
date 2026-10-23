@@ -321,6 +321,18 @@
       "baseUrl": "https://api.mistral.ai/v1",
       "models": [
         {
+          "id": "voxtral-mini-transcribe-3-0",
+          "name": "Voxtral Mini Transcribe 3",
+          "description": "Voxtral 3: fast, accurate, 50+ languages, $0.0035/min",
+          "descriptionKey": "models.descriptions.transcription.mistral_voxtral_mini_transcribe_3_0"
+        },
+        {
+          "id": "voxtral-small-transcribe-3-0",
+          "name": "Voxtral Small Transcribe 3",
+          "description": "Voxtral 3: most accurate, 50+ languages, $0.004/min",
+          "descriptionKey": "models.descriptions.transcription.mistral_voxtral_small_transcribe_3_0"
+        },
+        {
           "id": "voxtral-mini-latest",
           "name": "Voxtral Mini",
           "description": "Fast multilingual transcription",
@@ -475,6 +487,18 @@
           "reasoningEffort": {
             "options": ["none", "low", "medium", "high", "xhigh", "max"],
             "defaultValue": "medium"
+          }
+        },
+        {
+          "id": "gpt-6-luna",
+          "name": "GPT-6 Luna",
+          "description": "Fastest and lowest-cost model in the GPT-6 family",
+          "tokenParam": "max_completion_tokens",
+          "supportsTemperature": false,
+          "supportsVision": true,
+          "reasoningEffort": {
+            "options": ["none", "low", "medium", "high", "xhigh", "max"],
+            "defaultValue": "none"
           }
         },
         {

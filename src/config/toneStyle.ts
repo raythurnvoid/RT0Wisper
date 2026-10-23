@@ -1,8 +1,9 @@
 // Tone & Style: the tone dictation cleanup writes in, picked per kind of app.
 // Category and tone values are the ones openwhispr-api's /api/reason accepts
-// (`appCategory`, `tone`); main's toneAppCategories.js returns the same categories.
+// (`appCategory`, `tone`), plus this fork's "code" (never sent to the cloud);
+// main's toneAppCategories.js returns the same categories.
 
-export const TONE_APP_CATEGORIES = ["personal", "work", "email", "other"] as const;
+export const TONE_APP_CATEGORIES = ["personal", "work", "email", "code", "other"] as const;
 export type ToneAppCategory = (typeof TONE_APP_CATEGORIES)[number];
 
 export type DictationTone = "formal" | "casual" | "very_casual" | "excited";
@@ -11,6 +12,7 @@ export const TONE_OPTIONS: Record<ToneAppCategory, readonly DictationTone[]> = {
   personal: ["formal", "casual", "very_casual"],
   work: ["formal", "casual", "excited"],
   email: ["formal", "casual", "excited"],
+  code: ["formal", "casual"],
   other: ["formal", "casual", "excited"],
 };
 
@@ -21,6 +23,7 @@ export const DEFAULT_TONE_STYLES: ToneStyles = {
   personal: "casual",
   work: "formal",
   email: "formal",
+  code: "casual",
   other: "formal",
 };
 

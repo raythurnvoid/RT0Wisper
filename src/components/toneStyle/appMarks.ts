@@ -2,6 +2,7 @@ import type { ToneAppCategory } from "../../config/toneStyle";
 import appleMail from "../../assets/icons/apps/apple-mail.svg";
 import chatgpt from "../../assets/icons/apps/chatgpt.svg";
 import claude from "../../assets/icons/apps/claude.svg";
+import cursor from "../../assets/icons/providers/cursor.svg";
 import gmail from "../../assets/icons/apps/gmail.svg";
 import googleChat from "../../assets/icons/apps/google-chat.svg";
 import instagram from "../../assets/icons/apps/instagram.svg";
@@ -29,5 +30,6 @@ export const CATEGORY_APP_MARKS: Record<ToneAppCategory, { dialog: string[]; set
       dialog: [superhuman, appleMail, outlook, gmail],
       settings: [superhuman, appleMail, gmail],
     },
+    code: { dialog: [cursor, claude, chatgpt], settings: [cursor, claude, chatgpt] },
     other: { dialog: [linear, chatgpt, claude, notion], settings: [linear, chatgpt, notion] },
   };

@@ -1,12 +1,12 @@
 {
-  "appId": "com.gizmolabs.openwhispr",
+  "appId": "com.raythurnvoid.rt0wisper",
   "afterPack": "scripts/afterPack.js",
   "extraMetadata": {
     "windowsTrayIdentity": true
   },
-  "productName": "OpenWhispr",
+  "productName": "RT0Wisper",
   "protocols": {
-    "name": "OpenWhispr Protocol",
+    "name": "RT0Wisper Protocol",
     "schemes": ["openwhispr"]
   },
   "directories": {
@@ -268,7 +268,7 @@
     "include": "resources/nsis/installer.nsh"
   },
   "dmg": {
-    "title": "OpenWhispr",
+    "title": "RT0Wisper",
     "icon": "src/assets/icon.icns",
     "window": {
       "width": 540,
@@ -277,8 +277,8 @@
   },
   "publish": {
     "provider": "github",
-    "owner": "OpenWhispr",
-    "repo": "openwhispr",
+    "owner": "raythurnvoid",
+    "repo": "RT0Wisper",
     "private": false,
     "releaseType": "draft"
   }

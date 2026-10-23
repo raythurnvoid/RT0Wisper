@@ -13,7 +13,9 @@ import ModelCardList from "./ui/ModelCardList";
 import LocalModelPicker, { type LocalProvider } from "./LocalModelPicker";
 import { ProviderTabs, type ProviderTabItem } from "./ui/ProviderTabs";
 import OpenAICompatiblePanel from "./OpenAICompatiblePanel";
+import ChatGPTSignIn from "./ChatGPTSignIn";
 import { API_ENDPOINTS } from "../config/constants";
+import { isProductMode, onlyProductModels, onlyProductProviders } from "../config/productChoices";
 import {
   REASONING_PROVIDERS,
   toReasoningModel,
@@ -377,15 +379,18 @@ export default function ReasoningModelSelector({
   const cloudProviderTabs = useMemo(
     () =>
       filterByokProviderOptionsByPolicy(
-        CLOUD_PROVIDER_IDS.map((id): ProviderTabItem => ({
-          id,
-          name:
-            id === "custom"
-              ? t("reasoning.custom.providerName")
-              : id === OPENROUTER_TAB
-                ? "OpenRouter"
-                : REASONING_PROVIDERS[id as keyof typeof REASONING_PROVIDERS]?.name || id,
-        })),
+        onlyProductProviders(
+          CLOUD_PROVIDER_IDS.map((id): ProviderTabItem => ({
+            id,
+            name:
+              id === "custom"
+                ? t("reasoning.custom.providerName")
+                : id === OPENROUTER_TAB
+                  ? "OpenRouter"
+                  : REASONING_PROVIDERS[id as keyof typeof REASONING_PROVIDERS]?.name || id,
+          })),
+          "llm"
+        ),
         "llm",
         policyState
       ),
@@ -403,7 +408,7 @@ export default function ReasoningModelSelector({
     ...(isModeAllowedByPolicy(policyState, "llm", "providers") && cloudProviders.length > 0
       ? [{ id: "cloud", name: t("reasoning.mode.cloud") }]
       : []),
-    ...(isModeAllowedByPolicy(policyState, "llm", "local")
+    ...(isModeAllowedByPolicy(policyState, "llm", "local") && isProductMode("local")
       ? [{ id: "local", name: t("reasoning.mode.local") }]
       : []),
   ];
@@ -502,7 +507,7 @@ export default function ReasoningModelSelector({
 
   const openaiModelOptions = useMemo<CloudModelOption[]>(() => {
     const { icon, invertInDark } = getRemoteProviderIcon("openai");
-    return REASONING_PROVIDERS.openai.models.map((model) => ({
+    return onlyProductModels("openai", REASONING_PROVIDERS.openai.models).map((model) => ({
       ...model,
       description: model.descriptionKey
         ? t(model.descriptionKey, { defaultValue: model.description })
@@ -666,7 +671,8 @@ export default function ReasoningModelSelector({
                 />
               ) : (
                 <>
-                  {hostedKey && (
+                  {/* RT0Wisper runs OpenAI on the ChatGPT plan only, so it asks for no key. */}
+                  {hostedKey && displayedCloudProvider !== "openai" && (
                     <div className="space-y-2" onFocus={editing.onFocus} onBlur={editing.onBlur}>
                       {displayedCloudProvider === "corti" && (
                         <p className="text-xs text-muted-foreground">
@@ -695,6 +701,12 @@ export default function ReasoningModelSelector({
                         autoComplete="off"
                         spellCheck={false}
                       />
+                    </div>
+                  )}
+
+                  {displayedCloudProvider === "openai" && (
+                    <div className="pt-3">
+                      <ChatGPTSignIn />
                     </div>
                   )}
 

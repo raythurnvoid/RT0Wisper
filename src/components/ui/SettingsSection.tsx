@@ -159,6 +159,9 @@ export function InferenceModeSelector({
 }) {
   const { t } = useTranslation();
 
+  // One mode is no choice, so there is nothing to show.
+  if (modes.length <= 1) return null;
+
   return (
     <SettingsPanel className="overflow-hidden">
       {modes.map((mode) => {

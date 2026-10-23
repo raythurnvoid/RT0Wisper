@@ -24,6 +24,7 @@ import {
 import { extractApiErrorMessage } from "../apiErrorMessage";
 import { wrapCleanupTranscript } from "../../../config/prompts";
 import { openCodeSessionHeaders } from "../openCodeSession";
+import { callChatGPTPlan } from "../chatgptPlan";
 import {
   asProviderError,
   providerHttpError,
@@ -147,6 +148,12 @@ export const openaiProvider: InferenceProvider = {
     const resolvedProvider = config.provider || getSettings().cleanupProvider || "";
     const isCustomProvider = resolvedProvider === "custom";
     const isOpenRouter = resolvedProvider === "openrouter";
+
+    // Signed in with ChatGPT: OpenAI models run on the user's plan instead of an API key.
+    if (resolvedProvider === "openai" && typeof window !== "undefined") {
+      const planToken = await window.electronAPI?.getChatGPTAccessToken?.();
+      if (planToken) return callChatGPTPlan({ text, model, agentName, config, ctx }, planToken);
+    }
 
     logger.logReasoning("OPENAI_START", {
       model,

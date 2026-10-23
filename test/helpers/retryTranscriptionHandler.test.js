@@ -743,7 +743,7 @@ test("upload: mistral sends x-api-key with a provider-validated model and no lan
   assert.equal(fetches[0].init.headers["x-api-key"], "mk-mistral");
   assert.equal(fetches[0].init.headers.Authorization, undefined);
   const body = fetches[0].init.body.toString();
-  assert.match(body, /voxtral-mini-latest/);
+  assert.match(body, /voxtral-mini-transcribe-3-0/);
   assert.doesNotMatch(body, /name="language"/);
 });
 

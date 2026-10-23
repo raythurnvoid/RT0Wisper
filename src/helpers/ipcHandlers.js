@@ -15,6 +15,7 @@ const { openExternalUrl } = require("./externalUrlOpener");
 const { resolveFailedGpuBackends } = require("./whisper");
 const { WHISPER_GPU_FAILURE_REASON_KEYS } = require("./whisperGpuFailureReason");
 const { BYOK_API_KEYS } = require("../config/secretKeys");
+const chatgptAuth = require("./chatgptAuth");
 const tokenStore = require("./tokenStore");
 const accountScopeBinding = require("./accountScopeBinding");
 const { registerProductHelpIpc, remoteHelpPolicyState } = require("./productHelp");
@@ -1807,6 +1808,15 @@ class IPCHandlers {
       ipcMain.handle(`get-${k.base}-key`, () => this.environmentManager[k.get]());
       ipcMain.handle(`save-${k.base}-key`, saveSecretKey(k.get, k.save, k.storeKey));
     }
+
+    // Sign in with ChatGPT: OpenAI cleanup runs on the user's ChatGPT plan.
+    ipcMain.handle(
+      "chatgpt-sign-in",
+      serializeIpcError(() => chatgptAuth.signIn())
+    );
+    ipcMain.handle("chatgpt-sign-out", () => chatgptAuth.signOut());
+    ipcMain.handle("chatgpt-status", () => chatgptAuth.status());
+    ipcMain.handle("chatgpt-access-token", () => chatgptAuth.getAccessToken());
 
     ipcMain.handle("db-save-transcription", async (event, text, rawText, options) => {
       const result = this.databaseManager.saveTranscription(text, rawText, options);
@@ -4929,7 +4939,7 @@ class IPCHandlers {
           });
         }
 
-        const transcriptionModel = model || "voxtral-mini-latest";
+        const transcriptionModel = model || "voxtral-mini-transcribe-3-0";
         const formData = new FormData();
         const audioBlob = new Blob([Buffer.from(audioBuffer)], { type: "audio/webm" });
         formData.append("file", audioBlob, "audio.webm");

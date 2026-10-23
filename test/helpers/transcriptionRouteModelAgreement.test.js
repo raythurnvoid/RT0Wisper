@@ -79,7 +79,7 @@ test("a model belonging to another provider degrades to the provider default", a
 
   assert.equal(resolveByokModel("groq", "gpt-4o-mini-transcribe"), "whisper-large-v3-turbo");
   assert.equal(resolveByokModel("openai", "voxtral-mini-latest"), "gpt-transcribe");
-  assert.equal(resolveByokModel("mistral", "whisper-1"), "voxtral-mini-latest");
+  assert.equal(resolveByokModel("mistral", "whisper-1"), "voxtral-mini-transcribe-3-0");
   assert.equal(resolveByokModel("corti", "whisper-1"), "corti-transcribe");
   assert.equal(resolveByokModel("gemini", "whisper-1"), "gemini-3.5-transcribe");
   assert.equal(resolveByokModel("deepgram", "whisper-1"), "nova-3");

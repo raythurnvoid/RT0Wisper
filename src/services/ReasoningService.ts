@@ -1420,7 +1420,9 @@ class ReasoningService extends BaseReasoningService {
         if (hasVertexCreds) return true;
       }
 
-      const openaiKey = await window.electronAPI?.getOpenAIKey?.();
+      const openaiKey =
+        (await window.electronAPI?.getOpenAIKey?.()) ||
+        (await window.electronAPI?.chatgptStatus?.())?.signedIn;
       const anthropicKey = await window.electronAPI?.getAnthropicKey?.();
       const geminiKey = await window.electronAPI?.getGeminiKey?.();
       const groqKey = await window.electronAPI?.getGroqKey?.();

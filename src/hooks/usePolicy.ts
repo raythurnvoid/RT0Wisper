@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { isProductMode } from "../config/productChoices";
 import { usePolicyStore } from "../stores/policyStore";
 import { selectPolicyEffectiveSettings, useSettingsStore } from "../stores/settingsStore";
 import {
@@ -54,7 +55,8 @@ export function usePolicyModeOptions<T extends { id: InferenceMode; disabled?: b
   }
 ): PolicyModeOptions<T> {
   const snapshot = usePolicySnapshot();
-  const modes = filterModeOptionsByPolicy(options, scope, snapshot, providerCatalog);
+  const productOptions = options.filter((option) => isProductMode(option.id));
+  const modes = filterModeOptionsByPolicy(productOptions, scope, snapshot, providerCatalog);
   const selectionIsVisible = modes.some((option) => option.id === selectedMode && !option.disabled);
   const preservesRawSelection = snapshot.status === "idle" || snapshot.status === "unmanaged";
   return {
@@ -62,7 +64,13 @@ export function usePolicyModeOptions<T extends { id: InferenceMode; disabled?: b
     effectiveMode:
       preservesRawSelection || selectionIsVisible
         ? selectedMode
-        : reconcilePolicyModeSelection(options, scope, snapshot, selectedMode, providerCatalog),
+        : reconcilePolicyModeSelection(
+            productOptions,
+            scope,
+            snapshot,
+            selectedMode,
+            providerCatalog
+          ),
     isModeAllowed: (mode: InferenceMode) => isModeAllowedByPolicy(snapshot, scope, mode),
   };
 }

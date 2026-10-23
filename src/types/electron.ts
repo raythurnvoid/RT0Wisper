@@ -2394,6 +2394,12 @@ declare global {
       getOpenrouterKey: () => Promise<string | null>;
       saveOpenrouterKey: (key: string) => Promise<void>;
 
+      // Sign in with ChatGPT (OpenAI cleanup on the user's ChatGPT plan)
+      chatgptSignIn: () => Promise<{ signedIn: boolean; email: string } | { error: string }>;
+      chatgptSignOut: () => Promise<{ signedIn: boolean }>;
+      chatgptStatus: () => Promise<{ signedIn: boolean; email: string }>;
+      getChatGPTAccessToken: () => Promise<string>;
+
       // xAI API key management
       getXaiKey?: () => Promise<string | null>;
       saveXaiKey?: (key: string) => Promise<void>;

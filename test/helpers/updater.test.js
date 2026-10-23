@@ -1,4 +1,6 @@
 const test = require("node:test");
+// Skipped tests cover a feature RT0Wisper removed.
+const REMOVED = "Updates are off in RT0Wisper: the update feed is upstream OpenWhispr's.";
 const { afterEach, beforeEach } = require("node:test");
 const assert = require("node:assert/strict");
 const Module = require("node:module");
@@ -86,23 +88,27 @@ afterEach(() => {
   else process.env.APPIMAGE = originalAppImage;
 });
 
-test("startup and periodic checks run whether or not automatic updates are on", (t) => {
-  for (const enabled of [true, false, null]) {
-    t.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
-    const autoUpdater = makeAutoUpdater();
-    const manager = createUpdateManager(autoUpdater);
-    if (enabled !== null) manager.setAutoUpdatesEnabled(enabled);
+test(
+  "startup and periodic checks run whether or not automatic updates are on",
+  { skip: REMOVED },
+  (t) => {
+    for (const enabled of [true, false, null]) {
+      t.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
+      const autoUpdater = makeAutoUpdater();
+      const manager = createUpdateManager(autoUpdater);
+      if (enabled !== null) manager.setAutoUpdatesEnabled(enabled);
 
-    manager.checkForUpdatesOnStartup();
-    t.mock.timers.tick(STARTUP_DELAY_MS);
-    assert.equal(autoUpdater.calls, 1, `startup check with preference ${enabled}`);
-    t.mock.timers.tick(PERIODIC_INTERVAL_MS);
-    assert.equal(autoUpdater.calls, 2, `periodic check with preference ${enabled}`);
+      manager.checkForUpdatesOnStartup();
+      t.mock.timers.tick(STARTUP_DELAY_MS);
+      assert.equal(autoUpdater.calls, 1, `startup check with preference ${enabled}`);
+      t.mock.timers.tick(PERIODIC_INTERVAL_MS);
+      assert.equal(autoUpdater.calls, 2, `periodic check with preference ${enabled}`);
 
-    manager.cleanup();
-    t.mock.timers.reset();
+      manager.cleanup();
+      t.mock.timers.reset();
+    }
   }
-});
+);
 
 test("before the renderer syncs the preference, an available update is not downloaded", () => {
   const autoUpdater = makeAutoUpdater();
@@ -185,7 +191,7 @@ test("enabling automatic updates after the startup check found one starts the do
   manager.cleanup();
 });
 
-test("a failed background check only reaches renderers as update-error", (t) => {
+test("a failed background check only reaches renderers as update-error", { skip: REMOVED }, (t) => {
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
   const autoUpdater = makeAutoUpdater({ offline: true });
   const manager = createUpdateManager(autoUpdater);
@@ -202,38 +208,46 @@ test("a failed background check only reaches renderers as update-error", (t) => 
   manager.cleanup();
 });
 
-test("on macOS and Windows the updater reports itself as supported", async () => {
-  for (const platform of ["darwin", "win32"]) {
-    setPlatform(platform);
-    const manager = createUpdateManager(makeAutoUpdater());
-    assert.equal((await manager.getUpdateStatus()).isSupported, true, platform);
-    manager.cleanup();
+test(
+  "on macOS and Windows the updater reports itself as supported",
+  { skip: REMOVED },
+  async () => {
+    for (const platform of ["darwin", "win32"]) {
+      setPlatform(platform);
+      const manager = createUpdateManager(makeAutoUpdater());
+      assert.equal((await manager.getUpdateStatus()).isSupported, true, platform);
+      manager.cleanup();
+    }
   }
-});
+);
 
-test("a Linux AppImage is supported, but deb/rpm/tar.gz installs never touch the feed", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
-  setPlatform("linux");
+test(
+  "a Linux AppImage is supported, but deb/rpm/tar.gz installs never touch the feed",
+  { skip: REMOVED },
+  async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout", "setInterval"] });
+    setPlatform("linux");
 
-  process.env.APPIMAGE = "/opt/OpenWhispr.AppImage";
-  const appImage = createUpdateManager(makeAutoUpdater());
-  assert.equal((await appImage.getUpdateStatus()).isSupported, true);
-  appImage.cleanup();
+    process.env.APPIMAGE = "/opt/OpenWhispr.AppImage";
+    const appImage = createUpdateManager(makeAutoUpdater());
+    assert.equal((await appImage.getUpdateStatus()).isSupported, true);
+    appImage.cleanup();
 
-  delete process.env.APPIMAGE;
-  const autoUpdater = makeAutoUpdater();
-  const packaged = createUpdateManager(autoUpdater);
-  packaged.setAutoUpdatesEnabled(true);
-  assert.equal((await packaged.getUpdateStatus()).isSupported, false);
+    delete process.env.APPIMAGE;
+    const autoUpdater = makeAutoUpdater();
+    const packaged = createUpdateManager(autoUpdater);
+    packaged.setAutoUpdatesEnabled(true);
+    assert.equal((await packaged.getUpdateStatus()).isSupported, false);
 
-  packaged.checkForUpdatesOnStartup();
-  t.mock.timers.tick(STARTUP_DELAY_MS + PERIODIC_INTERVAL_MS);
-  assert.equal(autoUpdater.calls, 0, "no automatic checks are scheduled");
+    packaged.checkForUpdatesOnStartup();
+    t.mock.timers.tick(STARTUP_DELAY_MS + PERIODIC_INTERVAL_MS);
+    assert.equal(autoUpdater.calls, 0, "no automatic checks are scheduled");
 
-  const result = await packaged.checkForUpdates();
-  assert.equal(autoUpdater.calls, 0, "a manual check short-circuits too");
-  assert.equal(result.updateAvailable, false);
-  assert.match(result.message, /package manager/);
+    const result = await packaged.checkForUpdates();
+    assert.equal(autoUpdater.calls, 0, "a manual check short-circuits too");
+    assert.equal(result.updateAvailable, false);
+    assert.match(result.message, /package manager/);
 
-  packaged.cleanup();
-});
+    packaged.cleanup();
+  }
+);

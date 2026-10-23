@@ -408,6 +408,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // BYOK API keys (get/save for every provider in the secretKeys manifest)
   ...secretKeyApi,
 
+  // Sign in with ChatGPT (OpenAI cleanup on the user's ChatGPT plan)
+  chatgptSignIn: () => ipcRenderer.invoke("chatgpt-sign-in"),
+  chatgptSignOut: () => ipcRenderer.invoke("chatgpt-sign-out"),
+  chatgptStatus: () => ipcRenderer.invoke("chatgpt-status"),
+  getChatGPTAccessToken: () => ipcRenderer.invoke("chatgpt-access-token"),
+
   // Clipboard functions
   checkAccessibilityPermission: (silent) =>
     ipcRenderer.invoke("check-accessibility-permission", silent),

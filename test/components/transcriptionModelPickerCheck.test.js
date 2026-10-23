@@ -1,5 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+// Skipped tests cover a feature RT0Wisper removed.
+const REMOVED = "RT0Wisper offers Mistral only for speech-to-text, so these providers are hidden.";
 const { mountSettingsPanel } = require("../lib/settingsPanelHarness");
 
 const PICKER = "/components/TranscriptionModelPicker.tsx";
@@ -39,93 +41,111 @@ const mount = (t, { overrides, ...options } = {}) =>
     ...options,
   });
 
-test("a key is checked with the panel's model, or alone under a browsed tab", async (t) => {
-  const panel = await mount(t, { secrets: { groqApiKey: "gsk-saved", openaiApiKey: "sk-saved" } });
-  await panel.wait(0);
-  assert.deepEqual(panel.requests(), [
-    {
+test(
+  "a key is checked with the panel's model, or alone under a browsed tab",
+  { skip: REMOVED },
+  async (t) => {
+    const panel = await mount(t, {
+      secrets: { groqApiKey: "gsk-saved", openaiApiKey: "sk-saved" },
+    });
+    await panel.wait(0);
+    assert.deepEqual(panel.requests(), [
+      {
+        scope: "transcription",
+        provider: "groq",
+        apiKey: "gsk-saved",
+        model: "whisper-large-v3-turbo",
+      },
+    ]);
+    assert.equal(panel.checkField().props.invalidOn, "credentialsRejected");
+    await panel.selectTab("openai");
+    await panel.wait(0);
+    assert.deepEqual(panel.requests().at(-1), {
       scope: "transcription",
-      provider: "groq",
-      apiKey: "gsk-saved",
-      model: "whisper-large-v3-turbo",
-    },
-  ]);
-  assert.equal(panel.checkField().props.invalidOn, "credentialsRejected");
-  await panel.selectTab("openai");
-  await panel.wait(0);
-  assert.deepEqual(panel.requests().at(-1), {
-    scope: "transcription",
-    provider: "openai",
-    apiKey: "sk-saved",
-    model: "",
-  });
-});
+      provider: "openai",
+      apiKey: "sk-saved",
+      model: "",
+    });
+  }
+);
 
-test("a hidden picker sends nothing until it is shown, then asks again", async (t) => {
-  const panel = await mount(t, { secrets: { groqApiKey: "gsk-saved" }, visible: false });
-  await panel.wait(5000);
-  assert.equal(panel.requests().length, 0);
-  await panel.setVisible(true);
-  await panel.wait(0);
-  assert.equal(panel.requests().length, 1);
-  await panel.answer({ success: true });
-  await panel.setVisible(false);
-  await panel.setVisible(true);
-  await panel.wait(0);
-  assert.equal(panel.requests().length, 2, "a shown panel asks again");
-});
+test(
+  "a hidden picker sends nothing until it is shown, then asks again",
+  { skip: REMOVED },
+  async (t) => {
+    const panel = await mount(t, { secrets: { groqApiKey: "gsk-saved" }, visible: false });
+    await panel.wait(5000);
+    assert.equal(panel.requests().length, 0);
+    await panel.setVisible(true);
+    await panel.wait(0);
+    assert.equal(panel.requests().length, 1);
+    await panel.answer({ success: true });
+    await panel.setVisible(false);
+    await panel.setVisible(true);
+    await panel.wait(0);
+    assert.equal(panel.requests().length, 2, "a shown panel asks again");
+  }
+);
 
-test("a key saves trimmed once its check passes, never half typed", async (t) => {
-  const panel = await mount(t);
-  await panel.type(KEY, " gsk-pas");
-  await panel.type(KEY, " gsk-pasted ");
-  await panel.wait(500); // the key still has focus, so the pause runs
-  assert.deepEqual(
-    panel.requests().map((config) => config.apiKey),
-    ["gsk-pasted"]
-  );
-  assert.equal(panel.state().groqApiKey, "", "nothing is saved while the key is typed");
-  await panel.answer({ success: true });
-  assert.equal(panel.state().groqApiKey, "gsk-pasted", "a passing key saves at once");
-});
+test(
+  "a key saves trimmed once its check passes, never half typed",
+  { skip: REMOVED },
+  async (t) => {
+    const panel = await mount(t);
+    await panel.type(KEY, " gsk-pas");
+    await panel.type(KEY, " gsk-pasted ");
+    await panel.wait(500); // the key still has focus, so the pause runs
+    assert.deepEqual(
+      panel.requests().map((config) => config.apiKey),
+      ["gsk-pasted"]
+    );
+    assert.equal(panel.state().groqApiKey, "", "nothing is saved while the key is typed");
+    await panel.answer({ success: true });
+    assert.equal(panel.state().groqApiKey, "gsk-pasted", "a passing key saves at once");
+  }
+);
 
-test("Corti: the secret holds the status, checked with ID, region and tenant", async (t) => {
-  const panel = await mount(t, {
-    overrides: { selectedCloudProvider: "corti", selectedCloudModel: "corti-transcribe" },
-    secrets: {
-      cortiClientId: "corti-id",
-      cortiClientSecret: "corti-secret",
-      cortiEnvironment: "eu",
-      cortiTenant: "",
-    },
-  });
-  assert.ok(panel.field(CLIENT_SECRET).props.check);
-  assert.equal(panel.field(CLIENT_SECRET).props.invalidOn, "credentialsRejected");
-  assert.equal(panel.field(CLIENT_SECRET).props.type, "password");
-  assert.equal(panel.field(CLIENT_ID).props.check, undefined);
-  assert.equal(panel.field(CLIENT_ID).props.type, "text", "a client ID is not a secret");
-  assert.equal(panel.field(TENANT).props.check, undefined);
-  await panel.wait(0);
-  assert.deepEqual(panel.requests(), [
-    {
-      scope: "transcription",
-      provider: "corti",
-      clientId: "corti-id",
-      clientSecret: "corti-secret",
-      environment: "eu",
-      tenant: "",
-    },
-  ]);
-  await panel.choose("us");
-  await panel.wait(0); // choosing a region checks at once
-  assert.equal(panel.requests().at(-1).environment, "us");
-  await panel.type(CLIENT_ID, " corti-id-2 ");
-  assert.equal(panel.state().cortiClientId, "corti-id", "nothing is saved while it is typed");
-  await panel.blur(CLIENT_ID);
-  await panel.wait(0); // leaving the field checks at once
-  await panel.answer({ success: false, errorCode: "network", unverified: true });
-  assert.equal(panel.state().cortiClientId, "corti-id-2", "leaving the field saves it");
-});
+test(
+  "Corti: the secret holds the status, checked with ID, region and tenant",
+  { skip: REMOVED },
+  async (t) => {
+    const panel = await mount(t, {
+      overrides: { selectedCloudProvider: "corti", selectedCloudModel: "corti-transcribe" },
+      secrets: {
+        cortiClientId: "corti-id",
+        cortiClientSecret: "corti-secret",
+        cortiEnvironment: "eu",
+        cortiTenant: "",
+      },
+    });
+    assert.ok(panel.field(CLIENT_SECRET).props.check);
+    assert.equal(panel.field(CLIENT_SECRET).props.invalidOn, "credentialsRejected");
+    assert.equal(panel.field(CLIENT_SECRET).props.type, "password");
+    assert.equal(panel.field(CLIENT_ID).props.check, undefined);
+    assert.equal(panel.field(CLIENT_ID).props.type, "text", "a client ID is not a secret");
+    assert.equal(panel.field(TENANT).props.check, undefined);
+    await panel.wait(0);
+    assert.deepEqual(panel.requests(), [
+      {
+        scope: "transcription",
+        provider: "corti",
+        clientId: "corti-id",
+        clientSecret: "corti-secret",
+        environment: "eu",
+        tenant: "",
+      },
+    ]);
+    await panel.choose("us");
+    await panel.wait(0); // choosing a region checks at once
+    assert.equal(panel.requests().at(-1).environment, "us");
+    await panel.type(CLIENT_ID, " corti-id-2 ");
+    assert.equal(panel.state().cortiClientId, "corti-id", "nothing is saved while it is typed");
+    await panel.blur(CLIENT_ID);
+    await panel.wait(0); // leaving the field checks at once
+    await panel.answer({ success: false, errorCode: "network", unverified: true });
+    assert.equal(panel.state().cortiClientId, "corti-id-2", "leaving the field saves it");
+  }
+);
 
 test("Custom: the model holds the status, and the address waits until it is left", async (t) => {
   const typed = [];
@@ -256,37 +276,41 @@ test("Note Recording checks its streaming providers' keys too", async (t) => {
   ]);
 });
 
-test("Corti: nothing of a refused setup is saved, not even its client ID", async (t) => {
-  const panel = await mount(t, {
-    overrides: { selectedCloudProvider: "corti", selectedCloudModel: "corti-transcribe" },
-    secrets: {
-      cortiClientId: "corti-id",
-      cortiClientSecret: "corti-secret",
-      cortiEnvironment: "eu",
-      cortiTenant: "",
-    },
-  });
-  await panel.wait(0);
-  await panel.answer({ success: true });
-  await panel.type(CLIENT_SECRET, "wrong-secret");
-  await panel.blur(CLIENT_SECRET);
-  await panel.wait(0);
-  await panel.answer(REJECTED);
-  assert.equal(panel.state().cortiClientSecret, "corti-secret");
-  // A refusal can't say which part is wrong, so it holds back every part that was typed.
-  await panel.type(CLIENT_ID, "corti-id-2");
-  await panel.blur(CLIENT_ID);
-  await panel.wait(0);
-  await panel.answer(REJECTED);
-  assert.equal(panel.state().cortiClientId, "corti-id");
-  await panel.type(CLIENT_SECRET, "other-secret"); // the refused ID still holds the setup back
-  await panel.unmount();
-  assert.deepEqual(
-    [panel.state().cortiClientId, panel.state().cortiClientSecret],
-    ["corti-id", "corti-secret"],
-    "the working setup stays"
-  );
-});
+test(
+  "Corti: nothing of a refused setup is saved, not even its client ID",
+  { skip: REMOVED },
+  async (t) => {
+    const panel = await mount(t, {
+      overrides: { selectedCloudProvider: "corti", selectedCloudModel: "corti-transcribe" },
+      secrets: {
+        cortiClientId: "corti-id",
+        cortiClientSecret: "corti-secret",
+        cortiEnvironment: "eu",
+        cortiTenant: "",
+      },
+    });
+    await panel.wait(0);
+    await panel.answer({ success: true });
+    await panel.type(CLIENT_SECRET, "wrong-secret");
+    await panel.blur(CLIENT_SECRET);
+    await panel.wait(0);
+    await panel.answer(REJECTED);
+    assert.equal(panel.state().cortiClientSecret, "corti-secret");
+    // A refusal can't say which part is wrong, so it holds back every part that was typed.
+    await panel.type(CLIENT_ID, "corti-id-2");
+    await panel.blur(CLIENT_ID);
+    await panel.wait(0);
+    await panel.answer(REJECTED);
+    assert.equal(panel.state().cortiClientId, "corti-id");
+    await panel.type(CLIENT_SECRET, "other-secret"); // the refused ID still holds the setup back
+    await panel.unmount();
+    assert.deepEqual(
+      [panel.state().cortiClientId, panel.state().cortiClientSecret],
+      ["corti-id", "corti-secret"],
+      "the working setup stays"
+    );
+  }
+);
 
 test("Custom: a key the server refuses still saves once its field is left", async (t) => {
   const panel = await mount(t, {
@@ -306,106 +330,122 @@ test("Custom: a key the server refuses still saves once its field is left", asyn
   assert.equal(panel.state().customTranscriptionApiKey, "sk-wrong");
 });
 
-test("Corti: a refused secret stays in its field while another field is fixed", async (t) => {
-  const panel = await mount(t, {
-    overrides: { selectedCloudProvider: "corti", selectedCloudModel: "corti-transcribe" },
-    secrets: {
-      cortiClientId: "id",
-      cortiClientSecret: "",
-      cortiEnvironment: "eu",
-      cortiTenant: "",
-    },
-  });
-  await panel.type(CLIENT_SECRET, "right-secret");
-  await panel.blur(CLIENT_SECRET);
-  await panel.wait(0);
-  await panel.answer(REJECTED); // refused because the tenant is wrong
-  await panel.type(TENANT, "acme");
-  assert.equal(panel.field(CLIENT_SECRET).props.value, "right-secret");
-  assert.equal(panel.state().cortiClientSecret, "", "and it is not saved");
-  await panel.blur(TENANT);
-  await panel.wait(0);
-  assert.deepEqual(
-    [panel.requests().at(-1).clientSecret, panel.requests().at(-1).tenant],
-    ["right-secret", "acme"]
-  );
-  await panel.answer({ success: true });
-  assert.equal(panel.state().cortiClientSecret, "right-secret", "a passing check saves both");
-  assert.equal(panel.state().cortiTenant, "acme");
-});
-
-test("Corti: emptying the client ID to retype it keeps the typed secret", async (t) => {
-  const panel = await mount(t, {
-    overrides: { selectedCloudProvider: "corti", selectedCloudModel: "corti-transcribe" },
-    secrets: { cortiClientId: "wrong-id", cortiClientSecret: "", cortiEnvironment: "eu" },
-  });
-  await panel.type(CLIENT_SECRET, "right-secret");
-  await panel.blur(CLIENT_SECRET);
-  await panel.wait(0);
-  await panel.answer(REJECTED); // the ID is the wrong half
-  for (const id of ["wrong-i", "w", ""]) {
-    await panel.type(CLIENT_ID, id);
-    await panel.wait(500); // a part-typed ID is checked, but never answered here
+test(
+  "Corti: a refused secret stays in its field while another field is fixed",
+  { skip: REMOVED },
+  async (t) => {
+    const panel = await mount(t, {
+      overrides: { selectedCloudProvider: "corti", selectedCloudModel: "corti-transcribe" },
+      secrets: {
+        cortiClientId: "id",
+        cortiClientSecret: "",
+        cortiEnvironment: "eu",
+        cortiTenant: "",
+      },
+    });
+    await panel.type(CLIENT_SECRET, "right-secret");
+    await panel.blur(CLIENT_SECRET);
+    await panel.wait(0);
+    await panel.answer(REJECTED); // refused because the tenant is wrong
+    await panel.type(TENANT, "acme");
+    assert.equal(panel.field(CLIENT_SECRET).props.value, "right-secret");
+    assert.equal(panel.state().cortiClientSecret, "", "and it is not saved");
+    await panel.blur(TENANT);
+    await panel.wait(0);
+    assert.deepEqual(
+      [panel.requests().at(-1).clientSecret, panel.requests().at(-1).tenant],
+      ["right-secret", "acme"]
+    );
+    await panel.answer({ success: true });
+    assert.equal(panel.state().cortiClientSecret, "right-secret", "a passing check saves both");
+    assert.equal(panel.state().cortiTenant, "acme");
   }
-  assert.equal(panel.field(CLIENT_SECRET).props.value, "right-secret");
-  assert.equal(panel.state().cortiClientSecret, "", "the refused secret is not saved");
-  await panel.type(CLIENT_ID, "right-id");
-  await panel.blur(CLIENT_ID);
-  await panel.wait(0);
-  assert.deepEqual(
-    [panel.requests().at(-1).clientId, panel.requests().at(-1).clientSecret],
-    ["right-id", "right-secret"]
-  );
-  await panel.answer({ success: true });
-  assert.equal(panel.state().cortiClientSecret, "right-secret");
-});
+);
 
-test("Corti: a secret and the ID it was checked with are saved together", async (t) => {
-  const panel = await mount(t, {
-    overrides: { selectedCloudProvider: "corti", selectedCloudModel: "corti-transcribe" },
-    secrets: { cortiClientId: "id", cortiClientSecret: "good", cortiEnvironment: "eu" },
-  });
-  await panel.wait(0);
-  await panel.answer({ success: true });
-  await panel.type(CLIENT_SECRET, "bad");
-  await panel.blur(CLIENT_SECRET);
-  await panel.wait(0);
-  await panel.answer(REJECTED);
-  await panel.type(CLIENT_ID, "id2"); // still in the field
-  await panel.wait(500);
-  await panel.answer({ success: false, errorCode: "network", unverified: true });
-  assert.deepEqual(
-    [panel.state().cortiClientId, panel.state().cortiClientSecret],
-    ["id2", "bad"],
-    "never the refused pair (id, bad)"
-  );
-});
+test(
+  "Corti: emptying the client ID to retype it keeps the typed secret",
+  { skip: REMOVED },
+  async (t) => {
+    const panel = await mount(t, {
+      overrides: { selectedCloudProvider: "corti", selectedCloudModel: "corti-transcribe" },
+      secrets: { cortiClientId: "wrong-id", cortiClientSecret: "", cortiEnvironment: "eu" },
+    });
+    await panel.type(CLIENT_SECRET, "right-secret");
+    await panel.blur(CLIENT_SECRET);
+    await panel.wait(0);
+    await panel.answer(REJECTED); // the ID is the wrong half
+    for (const id of ["wrong-i", "w", ""]) {
+      await panel.type(CLIENT_ID, id);
+      await panel.wait(500); // a part-typed ID is checked, but never answered here
+    }
+    assert.equal(panel.field(CLIENT_SECRET).props.value, "right-secret");
+    assert.equal(panel.state().cortiClientSecret, "", "the refused secret is not saved");
+    await panel.type(CLIENT_ID, "right-id");
+    await panel.blur(CLIENT_ID);
+    await panel.wait(0);
+    assert.deepEqual(
+      [panel.requests().at(-1).clientId, panel.requests().at(-1).clientSecret],
+      ["right-id", "right-secret"]
+    );
+    await panel.answer({ success: true });
+    assert.equal(panel.state().cortiClientSecret, "right-secret");
+  }
+);
+
+test(
+  "Corti: a secret and the ID it was checked with are saved together",
+  { skip: REMOVED },
+  async (t) => {
+    const panel = await mount(t, {
+      overrides: { selectedCloudProvider: "corti", selectedCloudModel: "corti-transcribe" },
+      secrets: { cortiClientId: "id", cortiClientSecret: "good", cortiEnvironment: "eu" },
+    });
+    await panel.wait(0);
+    await panel.answer({ success: true });
+    await panel.type(CLIENT_SECRET, "bad");
+    await panel.blur(CLIENT_SECRET);
+    await panel.wait(0);
+    await panel.answer(REJECTED);
+    await panel.type(CLIENT_ID, "id2"); // still in the field
+    await panel.wait(500);
+    await panel.answer({ success: false, errorCode: "network", unverified: true });
+    assert.deepEqual(
+      [panel.state().cortiClientId, panel.state().cortiClientSecret],
+      ["id2", "bad"],
+      "never the refused pair (id, bad)"
+    );
+  }
+);
 
 for (const [field, typo, key] of [
   [CLIENT_ID, "good-idd", "cortiClientId"],
   [TENANT, "acm", "cortiTenant"],
 ]) {
-  test(`Corti: a refused ${key} typed over a saved setup is never saved`, async (t) => {
-    const saved = {
-      cortiClientId: "good-id",
-      cortiClientSecret: "good-secret",
-      cortiTenant: "acme",
-    };
-    const panel = await mount(t, {
-      overrides: { selectedCloudProvider: "corti", selectedCloudModel: "corti-transcribe" },
-      secrets: { ...saved, cortiEnvironment: "eu" },
-    });
-    await panel.wait(0);
-    await panel.answer({ success: true });
-    await panel.type(field, typo);
-    await panel.blur(field);
-    await panel.wait(0);
-    await panel.answer(REJECTED); // the secret is as saved, so the typo takes the blame
-    assert.equal(panel.state()[key], saved[key]);
-    assert.equal(panel.field(field).props.value, typo);
-    await panel.unmount();
-    assert.equal(panel.state()[key], saved[key], "nor when Settings closes");
-  });
+  test(
+    `Corti: a refused ${key} typed over a saved setup is never saved`,
+    { skip: REMOVED },
+    async (t) => {
+      const saved = {
+        cortiClientId: "good-id",
+        cortiClientSecret: "good-secret",
+        cortiTenant: "acme",
+      };
+      const panel = await mount(t, {
+        overrides: { selectedCloudProvider: "corti", selectedCloudModel: "corti-transcribe" },
+        secrets: { ...saved, cortiEnvironment: "eu" },
+      });
+      await panel.wait(0);
+      await panel.answer({ success: true });
+      await panel.type(field, typo);
+      await panel.blur(field);
+      await panel.wait(0);
+      await panel.answer(REJECTED); // the secret is as saved, so the typo takes the blame
+      assert.equal(panel.state()[key], saved[key]);
+      assert.equal(panel.field(field).props.value, typo);
+      await panel.unmount();
+      assert.equal(panel.state()[key], saved[key], "nor when Settings closes");
+    }
+  );
 }
 
 const CORTI_SAVED = { cortiClientId: "good-id", cortiClientSecret: "good-secret", cortiTenant: "" };
@@ -416,83 +456,103 @@ const mountCorti = (t) =>
   });
 const cortiPair = (panel) => [panel.state().cortiClientId, panel.state().cortiClientSecret];
 
-test("Corti: a new secret after a refused ID is saved with that ID", async (t) => {
-  const panel = await mountCorti(t);
-  await panel.wait(0);
-  await panel.answer({ success: true });
-  await panel.type(CLIENT_ID, "id-right");
-  await panel.blur(CLIENT_ID);
-  await panel.wait(0);
-  await panel.answer(REJECTED);
-  await panel.type(CLIENT_SECRET, "s2");
-  await panel.blur(CLIENT_SECRET);
-  await panel.wait(0);
-  await panel.answer({ success: false, errorCode: "network", unverified: true });
-  assert.deepEqual(cortiPair(panel), ["id-right", "s2"]);
-});
+test(
+  "Corti: a new secret after a refused ID is saved with that ID",
+  { skip: REMOVED },
+  async (t) => {
+    const panel = await mountCorti(t);
+    await panel.wait(0);
+    await panel.answer({ success: true });
+    await panel.type(CLIENT_ID, "id-right");
+    await panel.blur(CLIENT_ID);
+    await panel.wait(0);
+    await panel.answer(REJECTED);
+    await panel.type(CLIENT_SECRET, "s2");
+    await panel.blur(CLIENT_SECRET);
+    await panel.wait(0);
+    await panel.answer({ success: false, errorCode: "network", unverified: true });
+    assert.deepEqual(cortiPair(panel), ["id-right", "s2"]);
+  }
+);
 
-test("Corti: closing Settings while a refused ID waits keeps the working setup", async (t) => {
-  const panel = await mountCorti(t);
-  await panel.wait(0);
-  await panel.answer({ success: true });
-  await panel.type(CLIENT_ID, "id-right");
-  await panel.blur(CLIENT_ID);
-  await panel.wait(0);
-  await panel.answer(REJECTED);
-  await panel.type(CLIENT_SECRET, "s2");
-  await panel.unmount(); // before the new pair is answered
-  assert.deepEqual(cortiPair(panel), ["good-id", "good-secret"]);
-});
+test(
+  "Corti: closing Settings while a refused ID waits keeps the working setup",
+  { skip: REMOVED },
+  async (t) => {
+    const panel = await mountCorti(t);
+    await panel.wait(0);
+    await panel.answer({ success: true });
+    await panel.type(CLIENT_ID, "id-right");
+    await panel.blur(CLIENT_ID);
+    await panel.wait(0);
+    await panel.answer(REJECTED);
+    await panel.type(CLIENT_SECRET, "s2");
+    await panel.unmount(); // before the new pair is answered
+    assert.deepEqual(cortiPair(panel), ["good-id", "good-secret"]);
+  }
+);
 
-test("Corti: a refused ID typo is held back whatever the secret field holds", async (t) => {
-  const panel = await mountCorti(t);
-  await panel.wait(0);
-  await panel.answer({ success: true });
-  await panel.type(CLIENT_SECRET, "new-secret");
-  await panel.blur(CLIENT_SECRET);
-  await panel.wait(0);
-  await panel.answer(REJECTED); // the new secret belongs to a new ID
-  await panel.type(CLIENT_SECRET, "good-secret"); // and back to the saved one
-  await panel.type(CLIENT_ID, "good-idd");
-  await panel.blur(CLIENT_ID);
-  await panel.wait(0);
-  await panel.answer(REJECTED);
-  await panel.unmount();
-  assert.deepEqual(cortiPair(panel), ["good-id", "good-secret"]);
-});
+test(
+  "Corti: a refused ID typo is held back whatever the secret field holds",
+  { skip: REMOVED },
+  async (t) => {
+    const panel = await mountCorti(t);
+    await panel.wait(0);
+    await panel.answer({ success: true });
+    await panel.type(CLIENT_SECRET, "new-secret");
+    await panel.blur(CLIENT_SECRET);
+    await panel.wait(0);
+    await panel.answer(REJECTED); // the new secret belongs to a new ID
+    await panel.type(CLIENT_SECRET, "good-secret"); // and back to the saved one
+    await panel.type(CLIENT_ID, "good-idd");
+    await panel.blur(CLIENT_ID);
+    await panel.wait(0);
+    await panel.answer(REJECTED);
+    await panel.unmount();
+    assert.deepEqual(cortiPair(panel), ["good-id", "good-secret"]);
+  }
+);
 
-test("Corti: a refused setup stays held back after its panel is hidden", async (t) => {
-  const panel = await mountCorti(t);
-  await panel.wait(0);
-  await panel.answer({ success: true });
-  await panel.type(CLIENT_ID, "id-right");
-  await panel.blur(CLIENT_ID);
-  await panel.wait(0);
-  await panel.answer(REJECTED);
-  await panel.type(CLIENT_SECRET, "s2");
-  await panel.blur(CLIENT_SECRET);
-  await panel.setVisible(false); // the Note Recording tab, before the new pair is answered
-  await panel.unmount();
-  assert.deepEqual(cortiPair(panel), ["good-id", "good-secret"]);
-});
+test(
+  "Corti: a refused setup stays held back after its panel is hidden",
+  { skip: REMOVED },
+  async (t) => {
+    const panel = await mountCorti(t);
+    await panel.wait(0);
+    await panel.answer({ success: true });
+    await panel.type(CLIENT_ID, "id-right");
+    await panel.blur(CLIENT_ID);
+    await panel.wait(0);
+    await panel.answer(REJECTED);
+    await panel.type(CLIENT_SECRET, "s2");
+    await panel.blur(CLIENT_SECRET);
+    await panel.setVisible(false); // the Note Recording tab, before the new pair is answered
+    await panel.unmount();
+    assert.deepEqual(cortiPair(panel), ["good-id", "good-secret"]);
+  }
+);
 
-test("Corti: leaving a field that was already saved lets no answer save one still typed", async (t) => {
-  const panel = await mount(t, {
-    overrides: { selectedCloudProvider: "corti", selectedCloudModel: "corti-transcribe" },
-    secrets: {
-      cortiClientId: "id0",
-      cortiClientSecret: "s0",
-      cortiEnvironment: "eu",
-      cortiTenant: "",
-    },
-  });
-  await panel.wait(0);
-  await panel.answer({ success: true });
-  await panel.type(CLIENT_ID, "id1");
-  await panel.wait(500);
-  await panel.answer({ success: true }); // saves the ID while its field has focus
-  await panel.type(TENANT, "ac"); // leaving the ID marks nothing: it has no draft
-  await panel.wait(500);
-  await panel.answer({ success: false, errorCode: "network", unverified: true });
-  assert.equal(panel.state().cortiTenant, "", "a half-typed tenant waits until it is left");
-});
+test(
+  "Corti: leaving a field that was already saved lets no answer save one still typed",
+  { skip: REMOVED },
+  async (t) => {
+    const panel = await mount(t, {
+      overrides: { selectedCloudProvider: "corti", selectedCloudModel: "corti-transcribe" },
+      secrets: {
+        cortiClientId: "id0",
+        cortiClientSecret: "s0",
+        cortiEnvironment: "eu",
+        cortiTenant: "",
+      },
+    });
+    await panel.wait(0);
+    await panel.answer({ success: true });
+    await panel.type(CLIENT_ID, "id1");
+    await panel.wait(500);
+    await panel.answer({ success: true }); // saves the ID while its field has focus
+    await panel.type(TENANT, "ac"); // leaving the ID marks nothing: it has no draft
+    await panel.wait(500);
+    await panel.answer({ success: false, errorCode: "network", unverified: true });
+    assert.equal(panel.state().cortiTenant, "", "a half-typed tenant waits until it is left");
+  }
+);

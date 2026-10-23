@@ -886,7 +886,9 @@ type LlmTab =
   | "noteFormatting"
   | "chatIntelligence";
 
-const SPEECH_TABS: SpeechTab[] = ["dictation", "noteRecording", "upload"];
+// No Note Recording tab: meeting notes need a streaming provider, and Mistral Voxtral
+// (the only speech-to-text choice in RT0Wisper) has none.
+const SPEECH_TABS: SpeechTab[] = ["dictation", "upload"];
 const LLM_TABS: LlmTab[] = [
   "dictationCleanup",
   "dictationAgent",
@@ -982,7 +984,6 @@ function SpeechToTextTabs({
 
   const subTabs = [
     { id: "dictation", name: t("settingsPage.speechToText.tabs.dictation") },
-    { id: "noteRecording", name: t("settingsPage.speechToText.tabs.noteRecording") },
     { id: "upload", name: t("settingsPage.speechToText.tabs.upload") },
   ];
 

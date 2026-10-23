@@ -135,7 +135,7 @@ test("the vision picker shows no Active model after policy clears its selection"
       ...unconfiguredOverride,
       dictationAgentMode: "providers",
       dictationAgentProvider: "openai",
-      dictationAgentModel: "gpt-5-mini",
+      dictationAgentModel: "gpt-6-luna",
       dictationAgentVisionProvider: "gemini",
       dictationAgentVisionModel: "gemini-2.5-flash",
     },
@@ -154,7 +154,7 @@ test("the vision picker shows no Active model after policy clears its selection"
     );
 
   const visionMarkup = renderEditor("dictationAgentVision");
-  assert.ok(visionMarkup.includes("GPT-5 Mini"), "the model list is actually rendered");
+  assert.ok(visionMarkup.includes("GPT-6 Luna"), "the model list is actually rendered");
   assert.ok(!visionMarkup.includes(`>${i18n.t("common.active")}<`));
   assert.ok(renderEditor("dictationAgent").includes(`>${i18n.t("common.active")}<`));
 });

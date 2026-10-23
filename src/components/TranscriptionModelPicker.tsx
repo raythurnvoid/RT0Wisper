@@ -42,6 +42,7 @@ import { STREAMING_ONLY_PROVIDERS } from "../helpers/transcriptionRoute";
 import { getRemoteProviderIcon } from "../utils/providerIcons";
 import { createExternalLinkHandler } from "../utils/externalLinks";
 import { API_ENDPOINTS, normalizeBaseUrl } from "../config/constants";
+import { onlyProductModels, onlyProductProviders } from "../config/productChoices";
 import { isAzureOpenAIEndpoint } from "../utils/urlUtils";
 import { GetApiKeyLink } from "./ui/GetApiKeyLink";
 import { ConnectionCheckAnnouncer } from "./ui/ConnectionCheckAnnouncer";
@@ -577,7 +578,15 @@ export default function TranscriptionModelPicker({
     return providers.filter((provider) => !STREAMING_ONLY_PROVIDERS.has(provider.id));
   }, [streamingOnly, transcriptionContext]);
   const cloudProviders = useMemo(
-    () => filterByokProviderOptionsByPolicy(availableCloudProviders, "transcription", policyState),
+    () =>
+      filterByokProviderOptionsByPolicy(
+        onlyProductProviders(availableCloudProviders, "transcription").map((provider) => ({
+          ...provider,
+          models: onlyProductModels(provider.id, provider.models),
+        })),
+        "transcription",
+        policyState
+      ),
     [availableCloudProviders, policyState]
   );
   const cloudProviderTabs = useMemo(() => {
@@ -589,7 +598,11 @@ export default function TranscriptionModelPicker({
           ? { ...provider, name: t("transcription.customProvider") }
           : provider
     );
-    return filterByokProviderOptionsByPolicy(tabs, "transcription", policyState);
+    return filterByokProviderOptionsByPolicy(
+      onlyProductProviders(tabs, "transcription"),
+      "transcription",
+      policyState
+    );
   }, [availableCloudProviders, policyState, streamingOnly, t]);
   const localProviderTabs = useMemo(
     () =>

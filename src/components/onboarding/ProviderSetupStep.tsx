@@ -13,6 +13,7 @@ import { FieldLabel, ProviderCheckField } from "../ui/ProviderCheckField";
 import { ConnectionCheckAnnouncer } from "../ui/ConnectionCheckAnnouncer";
 import { Button } from "../ui/button";
 import { ProviderIcon } from "../ui/ProviderIcon";
+import ChatGPTSignIn from "../ChatGPTSignIn";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { useConnectionAutoCheck } from "../../hooks/useConnectionAutoCheck";
 import { isWindowSwitchBlur } from "../../hooks/useFocusHold";
@@ -399,6 +400,7 @@ export function ByokProviderStep({
     seed.provider === "corti" ? store.cortiClientSecret : ""
   );
   const [endpointFocused, setEndpointFocused] = useState(false);
+  const [planSignedIn, setPlanSignedIn] = useState(false);
 
   // The card the saved setup picked goes on the session once, at mount (both deps are
   // stable), so the draft this visit writes reopens on it; later switches report
@@ -515,9 +517,12 @@ export function ByokProviderStep({
     // A half-typed address may belong to someone else: nothing is sent while it is edited.
     hold: selfHosted && endpointFocused,
   });
+  // Signed in with ChatGPT, OpenAI runs on the user's plan and needs no API key.
+  const offersPlan = assistant && !selfHosted && selectedProvider === "openai";
   // A provider that gave no verdict (busy, slow or unreachable) refused nothing, so its
   // setup can be used; only a failure that faults it keeps Proceed locked.
-  const usable = check.phase === "connected" || check.phase === "unverified";
+  const usable =
+    (offersPlan && planSignedIn) || check.phase === "connected" || check.phase === "unverified";
   useEffect(() => {
     onConnectionChange(usable);
   }, [usable, onConnectionChange]);
@@ -700,6 +705,8 @@ export function ByokProviderStep({
                 </SelectContent>
               </Select>
             </label>
+
+            {offersPlan && <ChatGPTSignIn onStatusChange={setPlanSignedIn} />}
 
             {isCortiTranscription ? (
               <div className="grid grid-cols-2 gap-2">

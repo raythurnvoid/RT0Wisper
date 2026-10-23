@@ -55,6 +55,16 @@ test("desktop apps map to their category on every platform", () => {
       "geary",
       "org.kde.kmail2",
     ],
+    code: [
+      "Visual Studio Code com.microsoft.VSCode",
+      "Code.exe Chrome_WidgetWin_1",
+      "Cursor.exe Chrome_WidgetWin_1",
+      "WindowsTerminal.exe CASCADIA_HOSTING_WINDOW_CLASS",
+      "pwsh.exe ConsoleWindowClass",
+      "claude.exe Chrome_WidgetWin_1",
+      "ChatGPT.exe",
+      "idea64.exe SunAwtFrame",
+    ],
   };
   for (const [category, signatures] of Object.entries(expectations)) {
     for (const signature of signatures) {
@@ -66,7 +76,7 @@ test("desktop apps map to their category on every platform", () => {
 test("unlisted apps and look-alike names are other", () => {
   for (const signature of [
     "Notion notion.id",
-    "Visual Studio Code com.microsoft.VSCode",
+    "Xcode com.apple.dt.Xcode", // "code" only as a whole token
     "Google Chrome Canary com.google.Chrome.canary", // a browser with no page known
     "Notion.exe Chrome_WidgetWin_1", // the Chromium class alone isn't a browser
     "Mailchimp", // "mail" only as a whole token
@@ -88,7 +98,8 @@ test("a browser is judged by the page's host", () => {
   assert.equal(categoryOf(chrome, { urlHost: "www.linkedin.com" }), "work");
   assert.equal(categoryOf(chrome, { urlHost: "web.whatsapp.com" }), "personal");
   assert.equal(categoryOf(chrome, { urlHost: "x.com" }), "personal");
-  assert.equal(categoryOf(chrome, { urlHost: "github.com" }), "other");
+  assert.equal(categoryOf(chrome, { urlHost: "github.com" }), "code");
+  assert.equal(categoryOf(chrome, { urlHost: "claude.ai" }), "code");
   assert.equal(categoryOf(chrome, { urlHost: "notslack.com" }), "other");
 });
 
@@ -174,7 +185,7 @@ test("a Windows UWP app is named by its frame's title", () => {
 test("a native app's title never changes its category", () => {
   assert.equal(
     categoryOf("Visual Studio Code com.microsoft.VSCode", { windowTitle: "notes - Gmail" }),
-    "other"
+    "code"
   );
   assert.equal(categoryOf("Slack com.tinyspeck.slackmacgap", { windowTitle: "Gmail" }), "work");
 });

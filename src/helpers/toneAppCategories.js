@@ -1,6 +1,7 @@
 // What kind of writing a dictation is, judged from the app it goes into, so
 // Tone & Style can apply the tone the user picked for it: "personal" messages,
-// "work" messages, "email", or "other" for every app not listed here.
+// "work" messages, "email", "code" (editors, terminals, AI coding apps), or
+// "other" for every app not listed here.
 //
 // App identities match by whole token or phrase, never bare substring, as in
 // markdownTargets.js. The identity per platform:
@@ -93,6 +94,37 @@ const APP_SIGNATURES = {
     "shortwave",
     "tutanota",
   ],
+  // Code editors, terminals and AI coding apps: prompts, commits and code talk.
+  code: [
+    "code",
+    "vscodium",
+    "cursor",
+    "windsurf",
+    "zed",
+    "kiro",
+    "antigravity",
+    "idea64",
+    "pycharm64",
+    "webstorm64",
+    "rider64",
+    "goland64",
+    "clion64",
+    "studio64",
+    "devenv",
+    "sublime_text",
+    "windowsterminal",
+    "openconsole",
+    "powershell",
+    "pwsh",
+    "cmd.exe",
+    "wezterm-gui",
+    "alacritty",
+    "warp",
+    "ghostty",
+    "claude",
+    "chatgpt",
+    "codex",
+  ],
 };
 
 const BROWSER_SIGNATURES = [
@@ -158,6 +190,7 @@ const SITE_HOSTS = {
     "mail.aol.com",
     "app.tuta.com",
   ],
+  code: ["chatgpt.com", "claude.ai", "gemini.google.com", "github.com", "gitlab.com"],
 };
 
 // The site name a page title ends with, compared whole after normalizing.
@@ -188,9 +221,10 @@ const SITE_TITLES = {
     "zoho mail",
     "icloud mail",
   ],
+  code: ["chatgpt", "claude", "gemini", "github"],
 };
 
-const CATEGORIES = ["email", "work", "personal"];
+const CATEGORIES = ["email", "work", "personal", "code"];
 
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -273,7 +307,7 @@ function matchTitle(windowTitle, accepts = () => true) {
 
 /**
  * @param {{ appSignature?: string, windowTitle?: string, urlHost?: string } | null} context
- * @returns {"personal" | "work" | "email" | "other"}
+ * @returns {"personal" | "work" | "email" | "code" | "other"}
  */
 function classifyToneAppCategory(context) {
   if (!context) return "other";
