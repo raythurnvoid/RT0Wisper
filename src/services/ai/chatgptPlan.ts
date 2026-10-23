@@ -57,7 +57,10 @@ async function streamPlanResponse(
   token: string
 ): Promise<string> {
   const userText = config.systemPrompt ? text : wrapCleanupTranscript(text);
-  const effort = responsesReasoningEffort(model, "openai", config, API_ENDPOINTS.OPENAI_BASE);
+  // "Auto" sends no effort, and the server then uses "medium". Cleanup must be fast,
+  // so turn reasoning off unless the user picked a level in Settings.
+  const effort =
+    responsesReasoningEffort(model, "openai", config, API_ENDPOINTS.OPENAI_BASE) ?? "none";
   const body = {
     model,
     instructions: config.systemPrompt || ctx.getSystemPrompt(agentName, config.toneStyle),
@@ -82,7 +85,7 @@ async function streamPlanResponse(
     // Fast mode, as opencode's "GPT-6 Luna (Fast)" sends it. About 0.4 s faster in
     // tests; the reply still reports "default". Uses plan limits faster.
     service_tier: "priority",
-    ...(effort ? { reasoning: { effort } } : {}),
+    reasoning: { effort },
   };
 
   const controller = new AbortController();
