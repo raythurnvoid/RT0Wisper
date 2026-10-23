@@ -49,7 +49,7 @@ test("combined cleanup options honor every eligibility guard and use the actual 
   const manager = createManager();
   useSettingsStore.setState(good);
   assert.deepEqual(manager.getPipelineCleanupOptions(useSettingsStore.getState()), {
-    agentName: "OpenWhispr",
+    agentName: "Wisper",
     customDictionary: ["Orukeet"],
     customPrompt: good.customPrompts.cleanup,
     language: "en",
@@ -60,7 +60,7 @@ test("combined cleanup options honor every eligibility guard and use the actual 
   assert.deepEqual(
     manager.getPipelineCleanupOptions(useSettingsStore.getState(), { appCategory: "email" }),
     {
-      agentName: "OpenWhispr",
+      agentName: "Wisper",
       customDictionary: ["Orukeet"],
       customPrompt: good.customPrompts.cleanup,
       tone: "excited",

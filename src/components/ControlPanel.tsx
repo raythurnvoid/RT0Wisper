@@ -20,7 +20,6 @@ import { useJoinableWorkspaces } from "../hooks/useJoinableWorkspaces";
 import { useWorkspace } from "../hooks/useWorkspace";
 import { manageableWorkspaces, selectWorkspaceForSpaceCreation } from "../lib/workspaceSelection";
 import { useUsage } from "../hooks/useUsage";
-import { decideUpsell } from "../lib/upsell";
 import { useCollapsibleSidebar } from "../hooks/useCollapsibleSidebar";
 import {
   useTranscriptions,
@@ -194,12 +193,8 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
     null
   );
   const usage = useUsage();
-  const upsell = decideUpsell({
-    authLoaded,
-    isSignedIn,
-    hasPaidAccess: usage?.hasPaidAccess ?? null,
-    isPastDue: usage?.isPastDue ?? false,
-  });
+  // RT0Wisper has no OpenWhispr Cloud plans, so there is nothing to upsell.
+  const upsell = "hide";
 
   const {
     status: updateStatus,

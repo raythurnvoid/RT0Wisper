@@ -48,10 +48,13 @@ pnpm dev
 
 You can also set `MISTRAL_API_KEY` in your environment before you start the app.
 
+## Voice assistant
+
+Select some text, hold the hotkey, and say "Hey Wisper, make this more formal". The selected text is replaced with the result. You can change the name in Settings → Language Models → Voice Assistant.
+
 ## Limits
 
 - Meeting notes are off: Mistral Voxtral has no streaming model in this app.
-- Some screens (Profile, Plans & Billing) still come from OpenWhispr and are not used.
 
 ## Credits
 

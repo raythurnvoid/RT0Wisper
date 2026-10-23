@@ -3362,7 +3362,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     const cleanupReachable = !!settings.useCleanupModel && (!!cleanupModel || isCloud);
     const agentReachable = dictationAgentReachable(settings);
     const agentName =
-      typeof window !== "undefined" && window.localStorage ? getAgentName() : "OpenWhispr";
+      typeof window !== "undefined" && window.localStorage ? getAgentName() : "Wisper";
     if (
       !cleanupReachable &&
       !agentReachable &&

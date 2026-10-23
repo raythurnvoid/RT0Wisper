@@ -3,7 +3,8 @@ import { getSettings, useSettingsStore } from "../stores/settingsStore";
 import { agentNameDictionaryChanges } from "../helpers/agentNameDictionary";
 
 const AGENT_NAME_KEY = "agentName";
-const DEFAULT_AGENT_NAME = "OpenWhispr";
+// Short and easy to say: the speech-to-text result "Whisper" is one edit away and still matches.
+const DEFAULT_AGENT_NAME = "Wisper";
 
 export const getAgentName = (): string => {
   return localStorage.getItem(AGENT_NAME_KEY) || DEFAULT_AGENT_NAME;
