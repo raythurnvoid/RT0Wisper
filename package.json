@@ -75,7 +75,7 @@
     "format": "pnpm run format:js",
     "format:check": "eslint . && cd src && eslint . && prettier --check \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
     "lint": "eslint . && cd src && eslint .",
-    "test": "node --import tsx --test \"test/**/*.test.js\"",
+    "test": "node --import tsx --test --test-force-exit --test-timeout=30000 \"test/**/*.test.js\"",
     "typecheck": "cd src && tsc --noEmit",
     "quality-check": "pnpm run format:check && pnpm run typecheck",
     "i18n:check": "node scripts/check-i18n.js",
