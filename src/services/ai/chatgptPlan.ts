@@ -17,7 +17,8 @@ const FALLBACK_MODEL = "ministral-8b-latest";
 /**
  * OpenAI cleanup on the user's ChatGPT plan ("Sign in with ChatGPT"). The plan
  * route takes the Responses API with `store: false` and `stream: true`, the
- * system prompt as `instructions`, and no `temperature` or `max_output_tokens`:
+ * system prompt as `instructions`, `service_tier: "priority"` (not "fast", which it
+ * rejects), and no `temperature` or `max_output_tokens`:
  * https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations
  * Any failure falls back to Mistral, so dictation never stops.
  */
@@ -78,6 +79,9 @@ async function streamPlanResponse(
     ],
     store: false,
     stream: true,
+    // Fast mode, as opencode's "GPT-6 Luna (Fast)" sends it. About 0.4 s faster in
+    // tests; the reply still reports "default". Uses plan limits faster.
+    service_tier: "priority",
     ...(effort ? { reasoning: { effort } } : {}),
   };
 
