@@ -180,13 +180,6 @@
   "win": {
     "target": ["nsis"],
     "icon": "src/assets/icon.ico",
-    "forceCodeSigning": true,
-    "azureSignOptions": {
-      "endpoint": "https://eus.codesigning.azure.net/",
-      "certificateProfileName": "openwhispr-release",
-      "codeSigningAccountName": "OpenWhispr",
-      "publisherName": "CN=Gizmo Labs Inc., O=Gizmo Labs Inc., L=Wilmington, S=Delaware, C=US"
-    },
     "extraResources": [
       {
         "from": "resources/bin/nircmd.exe",

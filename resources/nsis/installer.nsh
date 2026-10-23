@@ -34,9 +34,9 @@
   ; Guarded by isUpdated so an in-place update does not silently turn launch at
   ; login off for a user who had enabled it.
   ${ifNot} ${isUpdated}
-    !insertmacro DeleteAutoStartEntry "com.gizmolabs.openwhispr"
-    !insertmacro DeleteAutoStartEntry "com.gizmolabs.openwhispr.staging"
-    !insertmacro DeleteAutoStartEntry "com.gizmolabs.openwhispr.development"
+    !insertmacro DeleteAutoStartEntry "com.raythurnvoid.rt0wisper"
+    !insertmacro DeleteAutoStartEntry "com.raythurnvoid.rt0wisper.staging"
+    !insertmacro DeleteAutoStartEntry "com.raythurnvoid.rt0wisper.development"
     nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="${SHERPA_FIREWALL_RULE}"'
     StrCpy $0 "$PROFILE\.cache\openwhispr\models"
     IfFileExists "$0\*.*" 0 +3
