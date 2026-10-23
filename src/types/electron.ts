@@ -2573,6 +2573,17 @@ declare global {
         error?: string;
       }>;
       openLogsFolder: () => Promise<{ success: boolean; error?: string }>;
+      getErrorLog: () => Promise<
+        Array<{
+          time: string;
+          level: string;
+          scope?: string;
+          source?: string;
+          message: string;
+          details?: string;
+        }>
+      >;
+      clearErrorLog: () => Promise<void>;
 
       // FFmpeg availability
       checkFFmpegAvailability: () => Promise<FFmpegAvailabilityResult>;

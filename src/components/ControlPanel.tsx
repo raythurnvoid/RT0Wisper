@@ -106,6 +106,7 @@ const InviteTeammateDialog = React.lazy(() => import("./InviteTeammateDialog"));
 const PersonalNotesView = React.lazy(() => import("./notes/PersonalNotesView"));
 const InsightsView = React.lazy(() => import("./InsightsView"));
 const DictionaryView = React.lazy(() => import("./DictionaryView"));
+const LogsView = React.lazy(() => import("./LogsView"));
 const UploadAudioView = React.lazy(() => import("./notes/UploadAudioView"));
 const IntegrationsView = React.lazy(() => import("./IntegrationsView"));
 const ChatView = React.lazy(() => import("./chat/ChatView"));
@@ -1273,6 +1274,11 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
               {activeView === "dictionary" && (
                 <Suspense fallback={null}>
                   <DictionaryView />
+                </Suspense>
+              )}
+              {activeView === "logs" && (
+                <Suspense fallback={null}>
+                  <LogsView />
                 </Suspense>
               )}
               {activeView === "upload" && policyActionsAllowed && (

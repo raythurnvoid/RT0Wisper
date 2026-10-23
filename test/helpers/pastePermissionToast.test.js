@@ -231,6 +231,8 @@ test("a standard toast with structured actions shows its description as text and
   }
   await h.render(React.createElement(ToastProvider, null, React.createElement(Probe)));
   const clicks = [];
+  // Re-transcribe runs in the control panel; the dictation widget shows no error toasts.
+  window.location.search = "?panel=true";
   await React.act(async () =>
     context.toast({
       title: "Failed to re-transcribe",

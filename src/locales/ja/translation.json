@@ -3719,7 +3719,8 @@
     "notSignedIn": "未サインイン",
     "chat": "チャット",
     "collapse": "サイドバーを折りたたむ",
-    "expand": "サイドバーを展開"
+    "expand": "サイドバーを展開",
+    "logs": "ログ"
   },
   "chat": {
     "newChat": "新しいチャット",
@@ -5097,5 +5098,13 @@
     "permissionDenied": "拒否",
     "permissionRestricted": "制限あり",
     "permissionNotDetermined": "未要求"
+  },
+  "logsView": {
+    "description": "音声入力とアプリの警告とエラー（新しい順）。ウィジェットには表示されません。",
+    "refresh": "更新",
+    "openFolder": "ログフォルダを開く",
+    "clear": "消去",
+    "empty": "警告やエラーはありません。",
+    "details": "詳細"
   }
 }

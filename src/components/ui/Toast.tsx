@@ -9,6 +9,7 @@ import {
   type ToastProps,
 } from "./useToast";
 import { isDictationPanelWindow } from "../../utils/windowContext";
+import logger from "../../utils/logger";
 import {
   getDictationErrorActionCount,
   getDictationErrorDuration,
@@ -121,6 +122,16 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const toast = React.useCallback(
     (props: Omit<ToastProps, "id">): string => {
       const id = Math.random().toString(36).substring(2, 11);
+      // RT0Wisper: the dictation widget shows no error cards. It just hides, and
+      // the error goes to the error log on the Logs page.
+      if (props.variant === "destructive" && isDictationPanelWindow()) {
+        logger.error(
+          props.title || props.description || "Dictation error",
+          { description: props.description, technicalDetails: props.technicalDetails },
+          "dictation"
+        );
+        return id;
+      }
       const presentation = resolveToastPresentation({
         presentation: props.presentation,
         variant: props.variant,

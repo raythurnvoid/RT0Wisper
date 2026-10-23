@@ -3771,7 +3771,8 @@
     "notSignedIn": "Sin sesión iniciada",
     "chat": "Chat",
     "collapse": "Contraer barra lateral",
-    "expand": "Expandir barra lateral"
+    "expand": "Expandir barra lateral",
+    "logs": "Registros"
   },
   "chat": {
     "newChat": "Nuevo chat",
@@ -5097,5 +5098,13 @@
     "permissionDenied": "Denegado",
     "permissionRestricted": "Restringido",
     "permissionNotDetermined": "No solicitado"
+  },
+  "logsView": {
+    "description": "Avisos y errores del dictado y la app, primero los más recientes. El widget no los muestra.",
+    "refresh": "Actualizar",
+    "openFolder": "Abrir carpeta de registros",
+    "clear": "Borrar",
+    "empty": "No hay avisos ni errores.",
+    "details": "Detalles"
   }
 }

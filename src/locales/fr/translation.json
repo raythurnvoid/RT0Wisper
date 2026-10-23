@@ -3027,7 +3027,8 @@
     "notSignedIn": "Non connecté",
     "chat": "Chat",
     "collapse": "Réduire la barre latérale",
-    "expand": "Développer la barre latérale"
+    "expand": "Développer la barre latérale",
+    "logs": "Journaux"
   },
   "workspaces": {
     "switcher": {
@@ -5097,5 +5098,13 @@
     "permissionDenied": "Refusé",
     "permissionRestricted": "Restreint",
     "permissionNotDetermined": "Non demandé"
+  },
+  "logsView": {
+    "description": "Avertissements et erreurs de la dictée et de l'app, les plus récents d'abord. Le widget ne les affiche pas.",
+    "refresh": "Actualiser",
+    "openFolder": "Ouvrir le dossier des journaux",
+    "clear": "Effacer",
+    "empty": "Aucun avertissement ni erreur.",
+    "details": "Détails"
   }
 }

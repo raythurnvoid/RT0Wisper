@@ -2901,7 +2901,8 @@
     "notSignedIn": "Not signed in",
     "chat": "Chat",
     "collapse": "Collapse sidebar",
-    "expand": "Expand sidebar"
+    "expand": "Expand sidebar",
+    "logs": "Logs"
   },
   "insights": {
     "title": "Insights",
@@ -5097,5 +5098,13 @@
     "permissionDenied": "Denied",
     "permissionRestricted": "Restricted",
     "permissionNotDetermined": "Not requested"
+  },
+  "logsView": {
+    "description": "Warnings and errors from dictation and the app, newest first. The widget does not show them.",
+    "refresh": "Refresh",
+    "openFolder": "Open logs folder",
+    "clear": "Clear",
+    "empty": "No warnings or errors.",
+    "details": "Details"
   }
 }

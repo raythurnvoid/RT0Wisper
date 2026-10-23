@@ -3719,7 +3719,8 @@
     "notSignedIn": "尚未登入",
     "chat": "聊天",
     "collapse": "收合側邊欄",
-    "expand": "展開側邊欄"
+    "expand": "展開側邊欄",
+    "logs": "日誌"
   },
   "chat": {
     "newChat": "新對話",
@@ -5097,5 +5098,13 @@
     "permissionDenied": "已拒絕",
     "permissionRestricted": "受限",
     "permissionNotDetermined": "尚未請求"
+  },
+  "logsView": {
+    "description": "聽寫和應用程式的警告與錯誤，最新的在前。小工具不會顯示它們。",
+    "refresh": "重新整理",
+    "openFolder": "開啟日誌資料夾",
+    "clear": "清除",
+    "empty": "沒有警告或錯誤。",
+    "details": "詳細資料"
   }
 }

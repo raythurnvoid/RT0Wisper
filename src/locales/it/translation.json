@@ -3719,7 +3719,8 @@
     "notSignedIn": "Non hai effettuato l'accesso",
     "chat": "Chat",
     "collapse": "Comprimi barra laterale",
-    "expand": "Espandi barra laterale"
+    "expand": "Espandi barra laterale",
+    "logs": "Log"
   },
   "chat": {
     "newChat": "Nuova chat",
@@ -5097,5 +5098,13 @@
     "permissionDenied": "Negata",
     "permissionRestricted": "Limitata",
     "permissionNotDetermined": "Non richiesta"
+  },
+  "logsView": {
+    "description": "Avvisi ed errori della dettatura e dell'app, dal più recente. Il widget non li mostra.",
+    "refresh": "Aggiorna",
+    "openFolder": "Apri cartella log",
+    "clear": "Cancella",
+    "empty": "Nessun avviso o errore.",
+    "details": "Dettagli"
   }
 }

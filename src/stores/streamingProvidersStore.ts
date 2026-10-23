@@ -28,7 +28,9 @@ export async function fetchProviders(): Promise<NoteRecordingConfigResult | null
       const data = await window.electronAPI.getNoteRecordingConfig!();
       if (!data) return null;
       if (data.success === false) {
-        logger.warn("Failed to fetch note recording providers", data, "streamingProviders");
+        if (data.code !== "CLOUD_NOT_CONFIGURED") {
+          logger.warn("Failed to fetch note recording providers", data, "streamingProviders");
+        }
         return data;
       }
       const providers = Array.isArray(data.providers) ? data.providers : [];

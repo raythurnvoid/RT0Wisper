@@ -179,6 +179,26 @@ export default function TranscriptionItem({
               "opacity-0 group-hover/row:opacity-100 has-[:focus-visible]:opacity-100 has-[[data-state=open]]:opacity-100"
           )}
         >
+          {/* Recovery is the point of a failed or discarded row, so its retry is a
+              visible button, not only a menu item. */}
+          {!isTranscribed && hasAudio && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleRetry}
+              disabled={isRetrying}
+              className="h-7 rounded-full px-3 text-xs"
+            >
+              {isRetrying ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : isDiscarded ? (
+                <ArchiveRestore size={13} />
+              ) : (
+                <RotateCcw size={13} />
+              )}
+              {isDiscarded ? t("controlPanel.history.discarded.recover") : retryLabel}
+            </Button>
+          )}
           {(isTranscribed || hasKeptText) && (
             <Tooltip content={t("controlPanel.history.copyText")}>
               <Button

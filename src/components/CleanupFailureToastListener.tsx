@@ -21,10 +21,8 @@ export default function CleanupFailureToastListener() {
     // Says the raw text was pasted only when it was: a held-back paste keeps its pill.
     const pasted = failure.pasted !== false;
     const pastedLine = pasted ? t("app.toasts.cleanupFailed.description") : "";
-    // The panel may already be hidden after dictation; surface it so the toast is seen.
-    if (isDictationPanelWindow()) {
-      window.electronAPI?.showDictationPanel?.();
-    }
+    // RT0Wisper keeps the hidden panel hidden: in the panel the toast below only
+    // goes to the error log (see Toast.tsx).
     if (failure.surface === "llm") {
       // A classified provider failure: why cleanup failed, then that the raw text went in.
       const { description, actions } = providerErrorToastProps(failure, t);

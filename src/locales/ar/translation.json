@@ -4622,7 +4622,8 @@
     "chat": "الدردشة",
     "collapse": "طي الشريط الجانبي",
     "expand": "توسيع الشريط الجانبي",
-    "insights": "الإحصاءات"
+    "insights": "الإحصاءات",
+    "logs": "السجلات"
   },
   "insights": {
     "title": "الإحصاءات",
@@ -5219,5 +5220,13 @@
     "permissionDenied": "مرفوض",
     "permissionRestricted": "مقيّد",
     "permissionNotDetermined": "لم يُطلب"
+  },
+  "logsView": {
+    "description": "التحذيرات والأخطاء من الإملاء والتطبيق، الأحدث أولاً. لا تعرضها الأداة.",
+    "refresh": "تحديث",
+    "openFolder": "فتح مجلد السجلات",
+    "clear": "مسح",
+    "empty": "لا توجد تحذيرات أو أخطاء.",
+    "details": "التفاصيل"
   }
 }

@@ -9,9 +9,16 @@ function createCloudConfigRequestHandler({
   configPath,
 }) {
   return async function handleCloudConfigRequest(event) {
+    const apiUrl = getApiUrl();
+    // RT0Wisper has no OpenWhispr cloud, so this is the normal state, not an error to log.
+    if (!apiUrl) {
+      return {
+        success: false,
+        error: "OpenWhispr API URL not configured",
+        code: "CLOUD_NOT_CONFIGURED",
+      };
+    }
     try {
-      const apiUrl = getApiUrl();
-      if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
 
       const authHeader = await getAuthHeader(event);
       if (!Object.keys(authHeader).length) throw new Error("Not authenticated");

@@ -977,7 +977,9 @@ class WindowManager {
       return;
     }
 
-    const MIN_HOLD_DURATION_MS = 150;
+    // Short enough that the start cue feels instant, long enough to ignore a
+    // brushed key. The mic already records pre-roll from key-down.
+    const MIN_HOLD_DURATION_MS = 60;
     const MAX_PUSH_DURATION_MS = 300000;
     const downTime = Date.now();
 

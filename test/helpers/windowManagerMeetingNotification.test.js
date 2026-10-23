@@ -241,10 +241,10 @@ test("native push-to-talk force-stops after the safety timeout", () => {
     manager.startWindowsPushToTalk("F8");
     assert.deepEqual(
       timers.pendingDelays().sort((left, right) => left - right),
-      [150, 300000]
+      [60, 300000]
     );
 
-    timers.runDelay(150);
+    timers.runDelay(60);
     assert.equal(starts, 1);
     timers.runDelay(300000);
     assert.equal(stops, 1);

@@ -3027,7 +3027,8 @@
     "notSignedIn": "Nicht angemeldet",
     "chat": "Chat",
     "collapse": "Seitenleiste einklappen",
-    "expand": "Seitenleiste ausklappen"
+    "expand": "Seitenleiste ausklappen",
+    "logs": "Protokolle"
   },
   "workspaces": {
     "switcher": {
@@ -5097,5 +5098,13 @@
     "permissionDenied": "Verweigert",
     "permissionRestricted": "Eingeschränkt",
     "permissionNotDetermined": "Nicht angefragt"
+  },
+  "logsView": {
+    "description": "Warnungen und Fehler aus Diktat und App, neueste zuerst. Das Widget zeigt sie nicht an.",
+    "refresh": "Aktualisieren",
+    "openFolder": "Protokollordner öffnen",
+    "clear": "Leeren",
+    "empty": "Keine Warnungen oder Fehler.",
+    "details": "Details"
   }
 }

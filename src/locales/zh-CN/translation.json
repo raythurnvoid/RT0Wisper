@@ -3719,7 +3719,8 @@
     "notSignedIn": "未登录",
     "chat": "聊天",
     "collapse": "折叠侧边栏",
-    "expand": "展开侧边栏"
+    "expand": "展开侧边栏",
+    "logs": "日志"
   },
   "chat": {
     "newChat": "新对话",
@@ -5097,5 +5098,13 @@
     "permissionDenied": "已拒绝",
     "permissionRestricted": "受限",
     "permissionNotDetermined": "尚未请求"
+  },
+  "logsView": {
+    "description": "听写和应用的警告与错误，最新的在前。小组件不会显示它们。",
+    "refresh": "刷新",
+    "openFolder": "打开日志文件夹",
+    "clear": "清除",
+    "empty": "没有警告或错误。",
+    "details": "详情"
   }
 }

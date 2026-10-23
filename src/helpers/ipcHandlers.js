@@ -11200,6 +11200,10 @@ class IPCHandlers {
       }
     });
 
+    ipcMain.handle("get-error-log", () => debugLogger.readErrorLog());
+
+    ipcMain.handle("clear-error-log", () => debugLogger.clearErrorLog());
+
     ipcMain.handle("check-for-updates", async () => {
       return this.updateManager.checkForUpdates();
     });

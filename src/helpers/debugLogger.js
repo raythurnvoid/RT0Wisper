@@ -225,6 +225,57 @@ class DebugLogger {
     if (this.logStream) {
       this.logStream.write(logLine);
     }
+
+    if (LOG_LEVELS[normalized] >= LOG_LEVELS.warn) {
+      this.appendErrorLog({
+        time: timestamp,
+        level: normalized,
+        scope,
+        source,
+        message,
+        details: metaText || undefined,
+      });
+    }
+  }
+
+  // RT0Wisper: warnings and errors always go to logs/errors.log (one JSON entry
+  // per line), whatever the log level, so the Logs page can list them.
+  getErrorLogPath() {
+    return path.join(app.getPath("userData"), "logs", "errors.log");
+  }
+
+  appendErrorLog(entry) {
+    try {
+      if (!app.isReady()) return;
+      const file = this.getErrorLogPath();
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.appendFileSync(file, `${JSON.stringify(entry)}\n`);
+    } catch {
+      // Logging must never break the app.
+    }
+  }
+
+  /** Newest first. Keeps the file small by trimming it to the last entries. */
+  readErrorLog() {
+    const MAX_ENTRIES = 500;
+    const file = this.getErrorLogPath();
+    if (!fs.existsSync(file)) return [];
+    const lines = fs.readFileSync(file, "utf8").split("\n").filter(Boolean);
+    const kept = lines.slice(-MAX_ENTRIES);
+    if (kept.length < lines.length) fs.writeFileSync(file, `${kept.join("\n")}\n`);
+    return kept
+      .flatMap((line) => {
+        try {
+          return [JSON.parse(line)];
+        } catch {
+          return [];
+        }
+      })
+      .reverse();
+  }
+
+  clearErrorLog() {
+    fs.rmSync(this.getErrorLogPath(), { force: true });
   }
 
   log(...args) {
