@@ -66,7 +66,6 @@ const screenContextCapture = require("./screenContextCapture");
 const { classifyToneAppCategory } = require("./toneAppCategories");
 const { UPLOAD_AUDIO_EXTENSIONS } = require("../constants/uploadAudioFormats.json");
 const { providerContentType, prepareProviderUpload } = require("./providerUploadAudio");
-const { DEFAULT_WHISPER_VAD_CONFIG, sanitizeWhisperVadConfig } = require("./whisperVadConfig");
 
 const MISTRAL_TRANSCRIPTION_URL = "https://api.mistral.ai/v1/audio/transcriptions";
 
@@ -220,12 +219,6 @@ class IPCHandlers {
     // Diarization session id → { noteId, ceiling }: speaker ids a stopped session's
     // diarization may still write to its note (see _resolveMeetingSpeakerIndexBase).
     this._diarizationSpeakerReservations = new Map();
-    this.whisperVadSettings = {
-      dictationSileroEnabled: false,
-      noteRecordingSileroEnabled: true,
-      meetingSileroEnabled: true,
-      ...DEFAULT_WHISPER_VAD_CONFIG,
-    };
     this._setupTextEditMonitor();
     this._setupRetentionCleanup();
     this._logDetectedGpus();
@@ -259,31 +252,6 @@ class IPCHandlers {
   // which keys the native Globe listener owns.
   _notifyHotkeyChanged(hotkey) {
     ipcMain.emit("hotkey-changed", null, hotkey);
-  }
-
-  _getWhisperVadSettings() {
-    const current = this.whisperVadSettings || {};
-    return {
-      dictationSileroEnabled: current.dictationSileroEnabled === true,
-      noteRecordingSileroEnabled: current.noteRecordingSileroEnabled !== false,
-      meetingSileroEnabled: current.meetingSileroEnabled !== false,
-      ...sanitizeWhisperVadConfig(current),
-    };
-  }
-
-  _setWhisperVadSettings(update = {}) {
-    const ALLOWED_KEYS = new Set([
-      "dictationSileroEnabled",
-      "noteRecordingSileroEnabled",
-      "meetingSileroEnabled",
-      ...Object.keys(require("../constants/whisperVad.json").DEFAULTS),
-    ]);
-    const filtered = {};
-    for (const [k, v] of Object.entries(update)) {
-      if (ALLOWED_KEYS.has(k)) filtered[k] = v;
-    }
-    this.whisperVadSettings = { ...this._getWhisperVadSettings(), ...filtered };
-    return this._getWhisperVadSettings();
   }
 
   _asyncMirrorWrite(note) {
@@ -3757,15 +3725,6 @@ class IPCHandlers {
       try {
         this.speakerDiarizationEnabled = payload?.enabled !== false;
         return { success: true };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    });
-
-    ipcMain.handle("whisper-vad-set-config", async (_event, payload) => {
-      try {
-        const config = this._setWhisperVadSettings(payload || {});
-        return { success: true, config };
       } catch (error) {
         return { success: false, error: error.message };
       }

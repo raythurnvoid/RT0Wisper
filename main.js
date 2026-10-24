@@ -873,11 +873,6 @@ async function startApp() {
     }
   });
 
-  ipcMain.on("start-minimized-changed", (_event, enabled) => {
-    if (debugLogger) debugLogger.info("Start minimized changed", { enabled });
-    environmentManager.saveStartMinimized(enabled);
-  });
-
   ipcMain.on("panel-start-position-changed", (_event, position) => {
     windowManager.setPanelStartPosition(position);
     environmentManager.savePanelStartPosition(position);

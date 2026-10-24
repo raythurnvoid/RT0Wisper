@@ -12,14 +12,7 @@ const ENDPOINTS = {
   corti: "https://ai.eu.corti.app/v1/models",
   // Public too, so it vouches only for the model; testTinfoilKey checks the key.
   tinfoil: "https://inference.tinfoil.sh/v1/models",
-  // Deepgram's model list answers without a key, so it cannot vouch for one. This is
-  // Deepgram's documented key check.
-  deepgram: "https://api.deepgram.com/v1/auth/token",
-  // AssemblyAI exposes no model list; listing transcripts is its 200-vs-401 probe.
-  assemblyai: "https://api.assemblyai.com/v2/transcript?limit=1",
 };
-// Listing the key's projects proves the key too: used only if Deepgram retires the route above.
-const DEEPGRAM_PROJECTS_ENDPOINT = "https://api.deepgram.com/v1/projects";
 // Turns a made-up key away before embedding anything; a valid key pays for one token.
 const TINFOIL_KEY_ENDPOINT = "https://inference.tinfoil.sh/v1/embeddings";
 
@@ -157,15 +150,6 @@ function buildModelEndpoints(base) {
   });
 }
 
-// Where the app sends a custom server's audio: buildApiUrl(normalizeBaseUrl(url),
-// "/audio/transcriptions") in src/config/constants.ts and transcriptionRoute.ts.
-// buildApiUrl normalises its base again, which strips a suffix a trailing slash hid
-// from the first pass, so this address takes the same two passes.
-function buildTranscriptionEndpoint(base) {
-  const { path, query, hash } = splitUrlDecorators(normalizeBaseUrl(normalizeBaseUrl(base)));
-  return joinUrlDecorators(`${path}/audio/transcriptions`, query, hash);
-}
-
 function resolveProviderRequest(config) {
   const provider = String(config?.provider || "").toLowerCase();
   const apiKey = typeof config?.apiKey === "string" ? config.apiKey.trim() : "";
@@ -175,7 +159,6 @@ function resolveProviderRequest(config) {
   // Authorization across origins), so a redirect fails the check instead. Custom
   // servers may redirect within themselves, such as adding a trailing slash.
   let redirect = "error";
-  let transcriptionEndpoint;
 
   if (provider === "openai") {
     const override = normalizeBaseUrl(
@@ -208,7 +191,6 @@ function resolveProviderRequest(config) {
       );
     }
     endpoints = buildModelEndpoints(parsed.toString());
-    transcriptionEndpoint = buildTranscriptionEndpoint(parsed.toString());
     redirect = "follow";
   }
 
@@ -229,16 +211,12 @@ function resolveProviderRequest(config) {
       headers["anthropic-version"] = "2023-06-01";
     } else if (provider === "gemini") {
       headers["x-goog-api-key"] = apiKey;
-    } else if (provider === "deepgram") {
-      headers.Authorization = `Token ${apiKey}`;
-    } else if (provider === "assemblyai") {
-      headers.Authorization = apiKey;
     } else {
       headers.Authorization = `Bearer ${apiKey}`;
     }
   }
 
-  return { endpoint: endpoints[0], endpoints, headers, redirect, transcriptionEndpoint };
+  return { endpoint: endpoints[0], endpoints, headers, redirect };
 }
 
 // When several candidate endpoints fail, report the most actionable failure. An answer that
@@ -416,31 +394,20 @@ async function testProviderConnection(
   }
 
   const provider = String(config?.provider || "").toLowerCase();
-  if (provider === "deepgram") return testDeepgramKey(request, fetchImpl);
-
   const model = String(config?.model || "").trim();
   let failure = null;
-  let everyListMissing = true;
   for (const endpoint of request.endpoints) {
     const next = await probe(endpoint, request, fetchImpl, async (response) => {
       if (!response.ok) return describeResponseFailure(response, provider);
       if (provider === "openrouter") return describeOpenRouterKey(response);
-      // AssemblyAI's probe lists transcripts, not models, so a 200 is the whole signal.
-      if (provider === "assemblyai" || (await responseOffersModel(response, model, provider))) {
-        return null;
-      }
-      return MODEL_NOT_FOUND;
+      return (await responseOffersModel(response, model, provider)) ? null : MODEL_NOT_FOUND;
     });
     if (!next) {
       return provider === "tinfoil"
         ? testTinfoilKey(request, config.apiKey.trim(), fetchImpl, runPaidCheck)
         : { success: true };
     }
-    everyListMissing = everyListMissing && next.status === 404;
     failure = pickFailure(failure, next);
-  }
-  if (everyListMissing && provider === "custom" && config?.scope === "transcription") {
-    return testTranscriptionEndpoint(request, model, fetchImpl);
   }
   return { success: false, ...failure };
 }
@@ -453,52 +420,6 @@ async function describeOpenRouterKey(response) {
   const key = (await readJson(response))?.data;
   if (!key?.is_management_key && !key?.is_provisioning_key) return null;
   return { ...describeStatusFailure(401, "openrouter"), status: response.status };
-}
-
-// A speech-only server may publish no model list. Its transcription address answers a
-// request that carries no audio with 400 or 422, which proves the address without
-// transcribing anything. The model is not checked.
-async function testTranscriptionEndpoint(request, model, fetchImpl) {
-  const body = new FormData();
-  body.append("model", model);
-  const failure = await probe(
-    request.transcriptionEndpoint,
-    request,
-    fetchImpl,
-    async (response) => {
-      if (response.status === 400 || response.status === 422) return null;
-      // Nothing takes transcriptions at this address.
-      if (response.status === 404 || response.status === 405) {
-        return {
-          errorCode: "transcriptionEndpointNotFound",
-          error: "Nothing takes transcriptions at this address.",
-          status: response.status,
-        };
-      }
-      return describeStatusFailure(response.status, "custom");
-    },
-    { method: "POST", body }
-  );
-  return failure ? { success: false, ...failure } : { success: true };
-}
-
-// Deepgram is checked by key alone, since its model names don't match the app's model ids.
-// A 404 means the key route was retired, not that the key is wrong, so the project list
-// stands in.
-async function testDeepgramKey(request, fetchImpl) {
-  let retired = false;
-  const failure = await probe(request.endpoint, request, fetchImpl, async (response) => {
-    if (response.ok) return null;
-    retired = response.status === 404;
-    return describeStatusFailure(response.status, "deepgram");
-  });
-  if (!retired) return failure ? { success: false, ...failure } : { success: true };
-  const fallback = await probe(DEEPGRAM_PROJECTS_ENDPOINT, request, fetchImpl, async (response) => {
-    if (!response.ok) return describeStatusFailure(response.status, "deepgram");
-    // No errorCode: the step shows its generic "could not be verified".
-    return Array.isArray((await readJson(response))?.projects) ? null : {};
-  });
-  return fallback ? { success: false, ...fallback } : { success: true };
 }
 
 // Runs once Tinfoil's public model list has vouched for the model. A valid key pays for one

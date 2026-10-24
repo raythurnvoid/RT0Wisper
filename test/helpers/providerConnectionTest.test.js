@@ -23,50 +23,6 @@ test("honors OpenAI base URL overrides from the environment", () => {
   }
 });
 
-test("the realtime STT providers use their own auth schemes, not Bearer", () => {
-  const deepgram = resolveProviderRequest({ provider: "deepgram", apiKey: "dg-secret" });
-  assert.equal(deepgram.endpoint, "https://api.deepgram.com/v1/auth/token");
-  assert.equal(deepgram.endpoint.includes("dg-secret"), false);
-  assert.equal(deepgram.headers.Authorization, "Token dg-secret");
-
-  const assemblyai = resolveProviderRequest({ provider: "assemblyai", apiKey: "aai-secret" });
-  assert.equal(assemblyai.endpoint, "https://api.assemblyai.com/v2/transcript?limit=1");
-  assert.equal(assemblyai.endpoint.includes("aai-secret"), false);
-  assert.equal(assemblyai.headers.Authorization, "aai-secret");
-});
-
-// AssemblyAI's payload is not OpenAI-shaped, so responseOffersModel would report
-// modelNotFound for a perfectly valid key.
-test("a 200 is the whole signal for providers with no OpenAI-shaped model list", async () => {
-  for (const [provider, model, payload] of [
-    ["assemblyai", "universal-streaming-english", { transcripts: [], page_details: {} }],
-  ]) {
-    assert.deepEqual(
-      await testProviderConnection({ provider, apiKey: "k", model }, async () => ({
-        ok: true,
-        status: 200,
-        json: async () => payload,
-      })),
-      { success: true },
-      provider
-    );
-
-    assert.deepEqual(
-      await testProviderConnection({ provider, apiKey: "bad", model }, async () => ({
-        ok: false,
-        status: 401,
-      })),
-      {
-        success: false,
-        errorCode: "credentialsRejected",
-        error: "The provider rejected these credentials.",
-        status: 401,
-      },
-      provider
-    );
-  }
-});
-
 test("normalizes custom compatible endpoints", () => {
   assert.equal(
     resolveProviderRequest({ provider: "custom", baseUrl: "localhost:11434/v1", apiKey: "" })
@@ -466,79 +422,6 @@ const GEMINI_OTHER_REASON = {
 const XAI_BAD_KEY = { code: "invalid-argument", error: "Incorrect API key provided: xa***00." };
 const CORTI_MALFORMED_HEADER = { message: "Missing or malformed Authorization header" };
 
-test("any 2xx from Deepgram's key check passes, whatever the body or model", async () => {
-  const { calls, fetchImpl } = recordingFetch(() => ({ ok: true, status: 200 }));
-  const config = { provider: "deepgram", apiKey: "dg-key", model: "nova-3" };
-  assert.deepEqual(await testProviderConnection(config, fetchImpl), { success: true });
-  assert.deepEqual(
-    calls.map((call) => call.url),
-    ["https://api.deepgram.com/v1/auth/token"]
-  );
-});
-
-test("Deepgram rejects a made-up key without trying the fallback", async () => {
-  for (const status of [401, 403]) {
-    const { calls, fetchImpl } = recordingFetch(() => jsonResponse(status));
-    const config = { provider: "deepgram", apiKey: "made-up" };
-    const result = await testProviderConnection(config, fetchImpl);
-    assert.equal(result.errorCode, "credentialsRejected");
-    assert.equal(result.status, status);
-    assert.deepEqual(
-      calls.map((call) => call.url),
-      ["https://api.deepgram.com/v1/auth/token"]
-    );
-  }
-});
-
-test("a retired Deepgram key route falls back to the key's project list", async () => {
-  const { calls, fetchImpl } = recordingFetch((url) =>
-    url.endsWith("/v1/auth/token") ? jsonResponse(404) : jsonResponse(200, { projects: [] })
-  );
-  const config = { provider: "deepgram", apiKey: "dg-key" };
-  assert.deepEqual(await testProviderConnection(config, fetchImpl), { success: true });
-  assert.deepEqual(
-    calls.map((call) => [call.url, call.init.headers.Authorization, call.init.redirect]),
-    [
-      ["https://api.deepgram.com/v1/auth/token", "Token dg-key", "error"],
-      ["https://api.deepgram.com/v1/projects", "Token dg-key", "error"],
-    ]
-  );
-});
-
-test("the project-list fallback passes only with its project list", async () => {
-  const afterRetiredRoute = (answer) =>
-    recordingFetch((url) => (url.endsWith("/v1/auth/token") ? jsonResponse(404) : answer))
-      .fetchImpl;
-  const config = { provider: "deepgram", apiKey: "dg-key" };
-  assert.deepEqual(
-    await testProviderConnection(config, afterRetiredRoute(jsonResponse(200, { data: [] }))),
-    { success: false }
-  );
-  const rejected = await testProviderConnection(config, afterRetiredRoute(jsonResponse(401)));
-  assert.equal(rejected.errorCode, "credentialsRejected");
-});
-
-test("a network failure on Deepgram's key check does not try the fallback", async () => {
-  const { calls, fetchImpl } = recordingFetch(() => {
-    throw new TypeError("fetch failed");
-  });
-  const result = await testProviderConnection({ provider: "deepgram", apiKey: "k" }, fetchImpl);
-  assert.equal(result.errorCode, "network");
-  assert.deepEqual(
-    calls.map((call) => call.url),
-    ["https://api.deepgram.com/v1/auth/token"]
-  );
-});
-
-test("Deepgram's other failures keep their status and skip the fallback", async () => {
-  for (const status of [400, 429, 500]) {
-    const { calls, fetchImpl } = recordingFetch(() => jsonResponse(status));
-    const result = await testProviderConnection({ provider: "deepgram", apiKey: "k" }, fetchImpl);
-    assert.equal(result.errorCode, "providerStatus", String(status));
-    assert.equal(calls.length, 1, String(status));
-  }
-});
-
 test("Anthropic and Gemini are asked for their largest page of models", () => {
   assert.equal(
     resolveProviderRequest({ provider: "anthropic", apiKey: "k" }).endpoint,
@@ -646,7 +529,7 @@ test("other providers' error bodies are never read", async () => {
       return { error: { message: "Incorrect API key provided: sk-ma****" } };
     },
   });
-  for (const provider of ["openai", "groq", "mistral", "anthropic", "assemblyai", "deepgram"]) {
+  for (const provider of ["openai", "groq", "mistral", "anthropic"]) {
     const result = await testProviderConnection({ provider, apiKey: "k" }, fetchImpl);
     assert.equal(result.errorCode, "providerStatus", provider);
   }
@@ -674,8 +557,6 @@ test("hosted providers refuse redirects; custom servers keep following them", as
     "openrouter",
     "corti",
     "tinfoil",
-    "deepgram",
-    "assemblyai",
   ];
   for (const provider of hosted) {
     assert.equal(resolveProviderRequest({ provider, apiKey: "k" }).redirect, "error", provider);
@@ -779,117 +660,6 @@ test("only a 200 from the OpenRouter key route can pass", async () => {
       String(status)
     );
   }
-});
-
-// A stand-in speech server with no model list. Its transcription address answers `status`,
-// and every request it gets is recorded with its body.
-async function speechServer(t, status) {
-  const received = [];
-  const base = await listen(t, (request, response) => {
-    let body = "";
-    request.on("data", (chunk) => (body += chunk));
-    request.on("end", () => {
-      received.push({ method: request.method, url: request.url, headers: request.headers, body });
-      response.writeHead(request.method === "POST" ? status : 404).end("{}");
-    });
-  });
-  return { base, received };
-}
-
-const speech = (baseUrl, extra = {}) => ({
-  scope: "transcription",
-  provider: "custom",
-  baseUrl,
-  model: "whisper-large-v3",
-  ...extra,
-});
-
-test("a speech server with no model list is checked at its transcription address", async (t) => {
-  for (const status of [400, 422]) {
-    const { base, received } = await speechServer(t, status);
-    const result = await testProviderConnection(speech(base, { apiKey: "sk-local" }));
-    assert.deepEqual(result, { success: true }, String(status));
-    assert.deepEqual(
-      received.map((entry) => `${entry.method} ${entry.url}`),
-      ["GET /models", "GET /v1/models", "POST /audio/transcriptions"]
-    );
-    const post = received[2];
-    assert.match(post.headers["content-type"], /^multipart\/form-data; boundary=/);
-    assert.equal(post.headers.authorization, "Bearer sk-local");
-    assert.match(post.body, /name="model"\r\n\r\nwhisper-large-v3\r\n/);
-    assert.doesNotMatch(post.body, /filename=/, "no audio is sent");
-  }
-});
-
-test("the transcription address is the one the app sends audio to", async (t) => {
-  const { base, received } = await speechServer(t, 422);
-  assert.deepEqual(await testProviderConnection(speech(`${base}/v1`)), { success: true });
-  assert.deepEqual(
-    received.map((entry) => `${entry.method} ${entry.url}`),
-    ["GET /v1/models", "POST /v1/audio/transcriptions"]
-  );
-  assert.equal(received[1].headers.authorization, undefined, "no key, no header");
-
-  // The full address with a trailing slash: the slash hides the suffix from one pass of
-  // normalizeBaseUrl, and the app's second pass is what strips it.
-  const typedInFull = await speechServer(t, 422);
-  const fullAddress = `${typedInFull.base}/v1/audio/transcriptions/`;
-  assert.deepEqual(await testProviderConnection(speech(fullAddress)), { success: true });
-  assert.deepEqual(
-    typedInFull.received
-      .filter((entry) => entry.method === "POST")
-      .map((entry) => `${entry.method} ${entry.url}`),
-    ["POST /v1/audio/transcriptions"]
-  );
-});
-
-test("the transcription address's answers keep their meaning", async (t) => {
-  const nothingHere = "Nothing takes transcriptions at this address.";
-  for (const [status, errorCode, error] of [
-    [401, "credentialsRejected", "The provider rejected these credentials."],
-    [403, "credentialsRejected", "The provider rejected these credentials."],
-    [404, "transcriptionEndpointNotFound", nothingHere],
-    [405, "transcriptionEndpointNotFound", nothingHere],
-    [500, "providerStatus", "The provider returned status 500."],
-    [200, "providerStatus", "The provider returned status 200."],
-  ]) {
-    const { base } = await speechServer(t, status);
-    const result = await testProviderConnection(speech(base));
-    assert.equal(result.errorCode, errorCode, String(status));
-    assert.equal(result.status, status);
-    assert.equal(result.error, error, String(status));
-  }
-  const flaky = recordingFetch((url, init) => {
-    if (init.method === "POST") throw new TypeError("fetch failed");
-    return jsonResponse(404);
-  });
-  const offline = await testProviderConnection(speech("http://127.0.0.1:9"), flaky.fetchImpl);
-  assert.equal(offline.errorCode, "network");
-  assert.deepEqual([flaky.calls[2].init.method, flaky.calls[2].init.redirect], ["POST", "follow"]);
-});
-
-test("only a speech check with every model list missing asks that address", async (t) => {
-  const { base, received } = await speechServer(t, 422);
-  // A language-model server keeps today's answer.
-  const reasoning = await testProviderConnection({ ...speech(base), scope: "reasoning" });
-  assert.equal(reasoning.errorCode, "endpointNotFound");
-  assert.equal(
-    received.some((entry) => entry.method === "POST"),
-    false
-  );
-
-  const keyed = recordingFetch((url) => jsonResponse(url.endsWith("/v1/models") ? 401 : 404));
-  const config = speech("http://127.0.0.1:9", { apiKey: "k" });
-  const rejected = await testProviderConnection(config, keyed.fetchImpl);
-  assert.equal(rejected.errorCode, "credentialsRejected");
-  assert.equal(keyed.calls.length, 2, "a list that answered anything but 404 already said why");
-
-  const down = recordingFetch(() => {
-    throw new TypeError("fetch failed");
-  });
-  const unreachable = await testProviderConnection(speech("http://127.0.0.1:9"), down.fetchImpl);
-  assert.equal(unreachable.errorCode, "network");
-  assert.equal(down.calls.length, 2);
 });
 
 const TINFOIL_MODELS = { data: [{ id: "voxtral-small-24b" }, { id: "gpt-oss-120b" }] };

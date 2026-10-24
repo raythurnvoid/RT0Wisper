@@ -316,20 +316,6 @@ export interface Workspace {
   billing_manager?: string | null;
 }
 
-export interface WhisperModelResult {
-  success: boolean;
-  model: string;
-  downloaded: boolean;
-  size_mb?: number;
-  error?: string;
-  code?: string;
-  isDownloading?: boolean;
-  isInstalling?: boolean;
-  downloadProgress?: number;
-  downloadedBytes?: number;
-  totalBytes?: number;
-}
-
 export interface ScreenRecordingAccessResult {
   granted: boolean;
   status: "granted" | "denied" | "not-determined" | "restricted" | "unknown" | "unsupported";
@@ -396,22 +382,6 @@ export interface LocalModelDownloadStatus {
   downloadedBytes: number;
   totalBytes: number;
   sequence: number;
-}
-
-export interface ParakeetModelResult {
-  success: boolean;
-  model: string;
-  downloaded: boolean;
-  path?: string;
-  size_bytes?: number;
-  size_mb?: number;
-  error?: string;
-  code?: string;
-  isDownloading?: boolean;
-  isInstalling?: boolean;
-  downloadProgress?: number;
-  downloadedBytes?: number;
-  totalBytes?: number;
 }
 
 export interface PasteToolsResult {
@@ -1263,7 +1233,6 @@ declare global {
       notifyHotkeyChanged?: (hotkey: string) => void;
       notifyFloatingIconAutoHideChanged?: (enabled: boolean) => void;
       onFloatingIconAutoHideChanged?: (callback: (enabled: boolean) => void) => () => void;
-      notifyStartMinimizedChanged?: (enabled: boolean) => void;
       notifyPanelStartPositionChanged?: (position: string) => void;
       getMainWindowHorizontalDirection?: () => Promise<"left" | "right">;
       onMainWindowHorizontalDirectionChanged?: (
@@ -1443,17 +1412,6 @@ declare global {
       setSpeakerDiarizationEnabled?: (
         enabled: boolean
       ) => Promise<{ success: boolean; error?: string }>;
-      setWhisperVadConfig?: (config: {
-        dictationSileroEnabled?: boolean;
-        noteRecordingSileroEnabled?: boolean;
-        meetingSileroEnabled?: boolean;
-        threshold?: number;
-        minSpeechDurationMs?: number;
-        minSilenceDurationMs?: number;
-        maxSpeechDurationS?: number;
-        speechPadMs?: number;
-        samplesOverlap?: number;
-      }) => Promise<{ success: boolean; config?: Record<string, unknown>; error?: string }>;
       onPreviewText?: (callback: (text: string) => void) => () => void;
       onPreviewAppend?: (callback: (text: string) => void) => () => void;
       onPreviewHold?: (callback: (payload: { showCleanup: boolean }) => void) => () => void;

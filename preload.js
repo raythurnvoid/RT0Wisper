@@ -544,9 +544,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   notifyPanelStartPositionChanged: (position) =>
     ipcRenderer.send("panel-start-position-changed", position),
 
-  // Start minimized
-  notifyStartMinimizedChanged: (enabled) => ipcRenderer.send("start-minimized-changed", enabled),
-
   // Agent mode
   updateVoiceAgentHotkey: (hotkey) => ipcRenderer.invoke("update-voice-agent-hotkey", hotkey),
   getVoiceAgentKey: () => ipcRenderer.invoke("get-voice-agent-key"),
@@ -601,5 +598,4 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   setSpeakerDiarizationEnabled: (enabled) =>
     ipcRenderer.invoke("meeting-set-speaker-diarization-enabled", { enabled }),
-  setWhisperVadConfig: (config) => ipcRenderer.invoke("whisper-vad-set-config", config),
 });
