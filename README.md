@@ -13,7 +13,7 @@
 
 ## Install (Windows)
 
-1. Download **[RT0Wisper-Setup.exe](https://github.com/raythurnvoid/RT0Wisper/releases/latest/download/RT0Wisper-Setup.exe)** from the [latest release](https://github.com/raythurnvoid/RT0Wisper/releases/latest).
+1. Download **[RT0Wisper-Setup.exe](https://github.com/raythurnvoid/only-whispers/releases/latest/download/RT0Wisper-Setup.exe)** from the [latest release](https://github.com/raythurnvoid/only-whispers/releases/latest).
 2. Run it. The installer is not signed, so Windows may show "Windows protected your PC". Click **More info**, then **Run anyway**.
 3. Open RT0Wisper and follow the setup screen (see [Setup](#setup)).
 
@@ -54,8 +54,8 @@ You need:
 Then:
 
 ```bash
-git clone https://github.com/raythurnvoid/RT0Wisper.git
-cd RT0Wisper
+git clone https://github.com/raythurnvoid/only-whispers.git
+cd only-whispers
 pnpm install
 pnpm dev
 ```
@@ -82,7 +82,7 @@ Useful commands:
 cp "dist/RT0Wisper Setup 0.1.0.exe" dist/RT0Wisper-Setup.exe
 git tag rt0wisper-v0.1.0
 git push origin rt0wisper-v0.1.0
-gh release create rt0wisper-v0.1.0 dist/RT0Wisper-Setup.exe --repo raythurnvoid/RT0Wisper --verify-tag --title "RT0Wisper 0.1.0" --latest
+gh release create rt0wisper-v0.1.0 dist/RT0Wisper-Setup.exe --repo raythurnvoid/only-whispers --verify-tag --title "RT0Wisper 0.1.0" --latest
 ```
 
 Change the version and the tag to match `package.json`. Keep `--repo`: this clone also has the OpenWhispr `upstream` remote, and without `--repo` the GitHub CLI may pick that repo.
