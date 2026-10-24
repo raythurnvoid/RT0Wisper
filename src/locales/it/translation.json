@@ -712,7 +712,9 @@
         "recover": "Recupera",
         "recovered": "Recuperata"
       },
-      "retryTranslationMode": "Modalità Traduzione"
+      "retryTranslationMode": "Modalità Traduzione",
+      "uploadAudio": "Carica audio",
+      "uploadError": "Impossibile caricare l'audio"
     },
     "aiCta": {
       "title": "Migliora le tue trascrizioni con l'IA",

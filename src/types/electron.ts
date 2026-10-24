@@ -1914,6 +1914,11 @@ declare global {
         filePath?: string;
         filePaths?: string[];
       }>;
+      importAudioFile: () => Promise<{
+        success: boolean;
+        transcription?: TranscriptionItem;
+        error?: string;
+      }>;
       getFileSize?: (filePath: string) => Promise<number>;
       transcribeAudioFile: (
         filePath: string,

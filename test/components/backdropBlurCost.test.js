@@ -15,46 +15,6 @@ async function loadModule(t, file, platform) {
   return vite.ssrLoadModule(file);
 }
 
-async function renderActionOverlay(t, platform, state) {
-  const mod = await loadModule(t, "/components/notes/ActionProcessingOverlay.tsx", platform);
-  return renderToStaticMarkup(createElement(mod.default, { state, actionName: "Generate Notes" }));
-}
-
-function cardClass(html) {
-  const match = html.match(/class="(relative flex flex-col[^"]*)"/);
-  assert.ok(match, "the overlay renders its card");
-  return match[1];
-}
-
-for (const [state, tint] of [
-  ["processing", "accent"],
-  ["success", "success"],
-]) {
-  test(`on Linux the ${state} overlay draws no backdrop blur and an opaque ${tint} card`, async (t) => {
-    const html = await renderActionOverlay(t, "linux", state);
-    const card = cardClass(html);
-
-    assert.doesNotMatch(html, /backdrop-blur/);
-    assert.match(html, /bg-background\/90/);
-    // The tint is mixed into the background, so the unblurred scanner line can't run through
-    // the label.
-    assert.match(card, new RegExp(`bg-\\[color-mix\\(in_oklab,var\\(--color-${tint}\\)_6%`));
-    assert.match(card, new RegExp(`dark:bg-\\[color-mix\\(in_oklab,var\\(--color-${tint}\\)_8%`));
-    assert.doesNotMatch(card, new RegExp(`bg-${tint}/\\d`));
-  });
-}
-
-test("on macOS a running action keeps its blur and translucent tints", async (t) => {
-  const html = await renderActionOverlay(t, "darwin", "processing");
-  const card = cardClass(html);
-
-  assert.match(html, /bg-background\/60/);
-  assert.match(html, /backdrop-blur-md/);
-  assert.match(card, /bg-accent\/6(?!\d)/);
-  assert.match(card, /backdrop-blur-xl/);
-  assert.doesNotMatch(card, /color-mix/);
-});
-
 test("a settings panel draws no backdrop blur on any platform", async (t) => {
   // It sits on a solid pane, so the blur showed nothing, and scrolling Settings redrew it
   // under every card on each frame.

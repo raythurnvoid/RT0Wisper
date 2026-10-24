@@ -691,7 +691,9 @@
         "recover": "Recuperar",
         "recovered": "Recuperada"
       },
-      "retryTranslationMode": "Modo de Tradução"
+      "retryTranslationMode": "Modo de Tradução",
+      "uploadAudio": "Enviar áudio",
+      "uploadError": "Não foi possível enviar o áudio"
     },
     "aiCta": {
       "title": "Melhore suas transcrições com IA",

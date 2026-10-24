@@ -232,6 +232,17 @@ function convertToMp3(inputPath, outputPath, options = {}) {
   );
 }
 
+// Mono Opus WebM, the same format as dictation recordings, so an uploaded file
+// can be stored and retried like one.
+function convertToWebm(inputPath, outputPath, options = {}) {
+  const { signal } = options;
+  return runFFmpegConversion(
+    ["-i", inputPath, "-vn", "-c:a", "libopus", "-b:a", "32k", "-ac", "1"],
+    outputPath,
+    { signal }
+  );
+}
+
 let reencodeSequence = 0;
 
 // Buffer in, buffer out. convertToWav works on paths, but retry paths hold
@@ -549,6 +560,7 @@ module.exports = {
   convertToWav,
   convertBufferToWav,
   convertToMp3,
+  convertToWebm,
   splitAudioFile,
   parseFfmpegDuration,
   wavToFloat32Samples,

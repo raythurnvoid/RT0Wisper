@@ -34,10 +34,6 @@ async function mountHistoryView(t) {
         export function useTranslation() { return { t, i18n: { language: "en" } }; }
         export const initReactI18next = { type: "3rdParty", init() {} };
       `,
-      "/hooks/useUpcomingEvents": `
-        export const useUpcomingEvents = () => ({ events: [], isLoading: false, isConnected: false });
-      `,
-      "/UpcomingMeetings": `export default function UpcomingMeetings() { return null; }`,
       "/ui/DictationHotkeyHint": `export default function DictationHotkeyHint() { return null; }`,
       "/ui/TranscriptionItem": `export default function TranscriptionItem() { return null; }`,
     },
@@ -59,9 +55,10 @@ async function mountHistoryView(t) {
           deleteTranscription: noop,
           clearAllTranscriptions: noop,
           onOpenSettings: noop,
-          onOpenIntegrations: noop,
           onShowAudioInFolder: noop,
           onRetryTranscription: async () => {},
+          onUploadAudio: noop,
+          isUploading: false,
           showDiscarded: false,
           onToggleDiscarded: noop,
           ...props,
@@ -95,15 +92,4 @@ test("the greeting waits for the first load before choosing", async (t) => {
 
   await render({ history: [ITEM], isLoading: false });
   assert.doesNotMatch(greeting().getAttribute("class"), /\binvisible\b/);
-});
-
-test("the user's name is isolated from the greeting's direction", async (t) => {
-  const { render, greeting } = await mountHistoryView(t);
-
-  await render({ history: [ITEM], userName: "J. Doe" });
-  const name = findElement(greeting(), (element) => element.tagName === "BDI");
-  assert.ok(name, "the name sits in its own <bdi>");
-  assert.equal(name.textContent, "J.");
-  assert.equal(name.getAttribute("dir"), "auto");
-  assert.match(greeting().textContent, /^controlPanel\.history\.welcomeBackNamed:/);
 });

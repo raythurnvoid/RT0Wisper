@@ -712,7 +712,9 @@
         "recover": "復元",
         "recovered": "復元しました"
       },
-      "retryTranslationMode": "翻訳モード"
+      "retryTranslationMode": "翻訳モード",
+      "uploadAudio": "音声をアップロード",
+      "uploadError": "音声をアップロードできませんでした"
     },
     "aiCta": {
       "title": "AI で文字起こしを向上させましょう",

@@ -712,7 +712,9 @@
         "recover": "Recover",
         "recovered": "Recovered"
       },
-      "retryTranslationMode": "Translation Mode"
+      "retryTranslationMode": "Translation Mode",
+      "uploadAudio": "Upload audio",
+      "uploadError": "Could not upload the audio"
     },
     "aiCta": {
       "title": "Enhance your transcriptions with AI",

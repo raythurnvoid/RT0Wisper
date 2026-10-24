@@ -712,7 +712,9 @@
         "recover": "Wiederherstellen",
         "recovered": "Wiederhergestellt"
       },
-      "retryTranslationMode": "Übersetzungsmodus"
+      "retryTranslationMode": "Übersetzungsmodus",
+      "uploadAudio": "Audio hochladen",
+      "uploadError": "Audio konnte nicht hochgeladen werden"
     },
     "aiCta": {
       "title": "Verbessern Sie Ihre Transkriptionen mit KI",

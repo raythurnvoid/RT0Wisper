@@ -712,7 +712,9 @@
         "recover": "Восстановить",
         "recovered": "Восстановлено"
       },
-      "retryTranslationMode": "Режим перевода"
+      "retryTranslationMode": "Режим перевода",
+      "uploadAudio": "Загрузить аудио",
+      "uploadError": "Не удалось загрузить аудио"
     },
     "aiCta": {
       "title": "Улучшите транскрипции с помощью ИИ",

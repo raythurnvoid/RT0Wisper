@@ -712,7 +712,9 @@
         "recover": "恢复",
         "recovered": "已恢复"
       },
-      "retryTranslationMode": "翻译模式"
+      "retryTranslationMode": "翻译模式",
+      "uploadAudio": "上传音频",
+      "uploadError": "无法上传音频"
     },
     "aiCta": {
       "title": "用 AI 提升你的转录质量",

@@ -712,7 +712,9 @@
         "recover": "復原",
         "recovered": "已復原"
       },
-      "retryTranslationMode": "翻譯模式"
+      "retryTranslationMode": "翻譯模式",
+      "uploadAudio": "上傳音訊",
+      "uploadError": "無法上傳音訊"
     },
     "aiCta": {
       "title": "用 AI 增強你的轉錄品質",

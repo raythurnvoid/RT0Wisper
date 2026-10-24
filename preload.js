@@ -307,6 +307,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Audio file operations
   selectAudioFile: (options) => ipcRenderer.invoke("select-audio-file", options),
+  importAudioFile: () => ipcRenderer.invoke("import-audio-file"),
   getFileSize: (filePath) => ipcRenderer.invoke("get-file-size", filePath),
   transcribeAudioFile: (filePath, options) =>
     ipcRenderer.invoke("transcribe-audio-file", filePath, options),

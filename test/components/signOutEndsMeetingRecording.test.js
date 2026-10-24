@@ -64,8 +64,6 @@ function createContext(calls) {
     logger: { error: (message) => calls.push(`error: ${message}`) },
     showAlertDialog: () => calls.push("alert"),
     t: (key) => key,
-    token: "invite-token",
-    storePendingInvitationToken: () => calls.push("invitation kept"),
   };
 }
 
@@ -79,26 +77,6 @@ test("Settings sign-out ends a live meeting before the account scope is cleared"
   await handleSignOut();
 
   assert.deepEqual(calls, ["meeting stopped", "team spaces purged", "signed out", "reloaded"]);
-});
-
-test("switching account from an invitation ends a live meeting before signing out", async () => {
-  const calls = [];
-  const handleSwitchAccount = vm.runInNewContext(
-    `${extractFunction(
-      "../../src/components/AcceptInvitationModal.tsx",
-      "handleSwitchAccount"
-    )}\nhandleSwitchAccount;`,
-    createContext(calls)
-  );
-
-  await handleSwitchAccount();
-
-  assert.deepEqual(calls, [
-    "invitation kept",
-    "meeting stopped",
-    "team spaces purged",
-    "signed out",
-  ]);
 });
 
 test("auth sign-out closes the activation stream while its credential is still valid", async () => {

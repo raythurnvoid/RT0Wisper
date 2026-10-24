@@ -4,17 +4,14 @@ import { cn } from "./lib/utils";
 import { useUiLocale } from "../hooks/useUiLocale";
 import { Button } from "./ui/button";
 import { PAGE_CONTENT_WIDTH_CLASS } from "./ui/pageWidth";
-import { Loader2, Sparkles, X, Trash2, Archive } from "./icons";
+import { Loader2, Sparkles, X, Trash2, Archive, Upload } from "./icons";
 import TranscriptionItem from "./ui/TranscriptionItem";
 import ThemedEmptyIllustration from "./ui/ThemedEmptyIllustration";
 import DictationHotkeyHint from "./ui/DictationHotkeyHint";
-import { BIDI_VALUE_TOKEN, BidiInterpolatedText } from "./ui/BidiInterpolatedText";
 import historyEmptyLight from "../assets/empty-states/home-history-light.svg";
 import historyEmptyDark from "../assets/empty-states/home-history-dark.svg";
 import type { TranscriptionItem as TranscriptionItemType } from "../types/electron";
 import { formatDateGroup } from "../utils/dateFormatting";
-import { useUpcomingEvents } from "../hooks/useUpcomingEvents";
-import UpcomingMeetings from "./UpcomingMeetings";
 import { useSettingsStore } from "../stores/settingsStore";
 import { effectiveLocalHistoryEnabled } from "../stores/policyRules";
 import { usePolicyStore } from "../stores/policyStore";
@@ -34,12 +31,12 @@ interface HistoryViewProps {
   deleteTranscription: (id: number) => void;
   clearAllTranscriptions: () => void;
   onOpenSettings: (section?: string) => void;
-  onOpenIntegrations: () => void;
   onShowAudioInFolder: (id: number) => void;
   onRetryTranscription: (id: number, options?: { isRecover?: boolean }) => Promise<void>;
+  onUploadAudio: () => void;
+  isUploading: boolean;
   showDiscarded: boolean;
   onToggleDiscarded: () => void;
-  userName?: string | null;
 }
 
 export default function HistoryView({
@@ -53,12 +50,12 @@ export default function HistoryView({
   deleteTranscription,
   clearAllTranscriptions,
   onOpenSettings,
-  onOpenIntegrations,
   onShowAudioInFolder,
   onRetryTranscription,
+  onUploadAudio,
+  isUploading,
   showDiscarded,
   onToggleDiscarded,
-  userName,
 }: HistoryViewProps) {
   const { t } = useTranslation();
   const locale = useUiLocale();
@@ -66,9 +63,7 @@ export default function HistoryView({
   const dataRetentionEnabled = usePolicyStore((policyState) =>
     effectiveLocalHistoryEnabled(policyState, personalDataRetentionEnabled)
   );
-  const { events, isLoading: eventsLoading, isConnected } = useUpcomingEvents();
   const toneStylePrompt = useToneStylePrompt();
-  const firstName = userName?.trim().split(/\s+/)[0];
   const hasHistory = history.length > 0;
 
   const groupedHistory = useMemo(() => {
@@ -107,23 +102,22 @@ export default function HistoryView({
 
   return (
     <div className={cn(PAGE_CONTENT_WIDTH_CLASS, "px-6 pt-4 pb-6")}>
-      {/* Hidden until the first load settles, so a returning user isn't greeted as new. */}
-      <h2 className={cn("mb-4 text-xl text-foreground", isLoading && !hasHistory && "invisible")}>
-        {firstName ? (
-          <BidiInterpolatedText
-            text={t(
-              hasHistory
-                ? "controlPanel.history.welcomeBackNamed"
-                : "controlPanel.history.welcomeNamed",
-              { name: BIDI_VALUE_TOKEN }
-            )}
-            value={firstName}
-            dir="auto"
-          />
-        ) : (
-          t(hasHistory ? "controlPanel.history.welcomeBack" : "controlPanel.history.welcome")
-        )}
-      </h2>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        {/* Hidden until the first load settles, so a returning user isn't greeted as new. */}
+        <h2 className={cn("text-xl text-foreground", isLoading && !hasHistory && "invisible")}>
+          {t(hasHistory ? "controlPanel.history.welcomeBack" : "controlPanel.history.welcome")}
+        </h2>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={onUploadAudio}
+          disabled={isUploading}
+        >
+          {isUploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+          {t("controlPanel.history.uploadAudio")}
+        </Button>
+      </div>
       {toneStylePrompt.showBanner && (
         <ToneStyleBanner
           cleanupEnabled={useCleanupModel}
@@ -176,8 +170,8 @@ export default function HistoryView({
         </div>
       )}
 
-      <div className="flex gap-8">
-        <div className="min-w-0 flex-1">
+      <div>
+        <div className="min-w-0">
           {!dataRetentionEnabled && (
             <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/10 px-3.5 py-2.5 flex items-center gap-2.5">
               <span className="text-amber-600 dark:text-amber-400 shrink-0 text-sm">⊘</span>
@@ -246,17 +240,6 @@ export default function HistoryView({
               ))}
             </div>
           )}
-        </div>
-
-        {/* With history, drop the day cards by one date row (pt-2 + text-sm line + pb-2.5) so
-            the first one lines up with the first transcription. */}
-        <div className={cn("hidden w-80 shrink-0 md:block", history.length > 0 && "pt-[2.375rem]")}>
-          <UpcomingMeetings
-            events={events}
-            isLoading={eventsLoading}
-            isConnected={isConnected}
-            onConnectCalendar={onOpenIntegrations}
-          />
         </div>
       </div>
     </div>

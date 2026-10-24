@@ -3129,6 +3129,47 @@ class IPCHandlers {
       return { canceled: false, filePath: result.filePaths[0] };
     });
 
+    // Upload on Home: the picked file becomes a failed row holding its audio,
+    // so the renderer can run it through Retry like a failed dictation.
+    ipcMain.handle("import-audio-file", async () => {
+      const { dialog } = require("electron");
+      const fs = require("fs");
+      const os = require("os");
+      const picked = await dialog.showOpenDialog({
+        properties: ["openFile"],
+        filters: [{ name: "Audio and Video Files", extensions: UPLOAD_AUDIO_EXTENSIONS }],
+      });
+      if (picked.canceled || !picked.filePaths.length) return { success: false };
+      const webmPath = path.join(os.tmpdir(), `rt0wisper-upload-${Date.now()}.webm`);
+      try {
+        await require("./ffmpegUtils").convertToWebm(picked.filePaths[0], webmPath);
+        const saved = this.databaseManager.saveTranscription("", null, {
+          status: "failed",
+          errorMessage: "Uploaded file, not transcribed yet",
+        });
+        if (!saved?.success || !saved.transcription) throw new Error("Could not save the upload");
+        const id = saved.transcription.id;
+        const stored = this.audioStorageManager.saveAudio(
+          id,
+          fs.readFileSync(webmPath),
+          saved.transcription.timestamp
+        );
+        if (!stored.success) throw new Error("Could not save the audio");
+        this.databaseManager.updateTranscriptionAudio(id, {
+          hasAudio: 1,
+          audioDurationMs: null,
+          provider: null,
+          model: null,
+        });
+        return { success: true, transcription: this.databaseManager.getTranscriptionById(id) };
+      } catch (error) {
+        debugLogger.warn("Audio upload failed", { error: error.message });
+        return { success: false, error: error.message };
+      } finally {
+        fs.rmSync(webmPath, { force: true });
+      }
+    });
+
     // Fired by the preload's getPathForFile for real drag-dropped files; a
     // renderer-constructed File yields "" there, so this can't be forged.
     ipcMain.on("approve-audio-path", (_event, filePath) => {
