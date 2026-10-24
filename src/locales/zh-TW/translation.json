@@ -1983,8 +1983,8 @@
         "title": "外觀"
       },
       "floatingIcon": {
-        "autoHide": "閒置時自動隱藏",
-        "autoHideDescription": "在開始語音輸入前保持圖示隱藏",
+        "alwaysVisible": "始終顯示",
+        "alwaysVisibleDescription": "未進行語音輸入時也在螢幕上顯示圖示",
         "description": "控制語音輸入圖示在畫面上的顯示時機",
         "title": "浮動圖示",
         "startPosition": "起始位置",

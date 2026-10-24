@@ -93,13 +93,66 @@ function startPush(t) {
 }
 
 test("a physical release stops dictation without reporting a forced stop", (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  t.after(() => t.mock.timers.reset());
+
+  const { manager, channels } = startPush(t);
+  t.mock.timers.tick(200); // held past DOUBLE_TAP_MAX_PRESS_MS, so not a tap
+  manager.handleWindowsPushKeyUp("Control+Space");
+
+  assert.deepEqual(channels(), ["prepare-dictation", "start-dictation", "stop-dictation"]);
+});
+
+// Tap, then press again: the recording keeps going after both releases and the
+// next press stops it.
+test("a double tap locks the recording until the next press", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  t.after(() => t.mock.timers.reset());
+
+  const { manager, channels } = startPush(t);
+  manager.isDictating = () => true;
+  manager.handleWindowsPushKeyUp("Control+Space");
+  t.mock.timers.tick(100);
+  manager.startWindowsPushToTalk("Control+Space");
+  manager.handleWindowsPushKeyUp("Control+Space");
+  t.mock.timers.tick(5_000);
+  assert.deepEqual(channels(), ["prepare-dictation", "start-dictation"]);
+
+  manager.startWindowsPushToTalk("Control+Space");
+  manager.handleWindowsPushKeyUp("Control+Space");
+
+  assert.deepEqual(channels(), ["prepare-dictation", "start-dictation", "stop-dictation"]);
+});
+
+test("a lone tap is cancelled instead of transcribed", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
   t.after(() => t.mock.timers.reset());
 
   const { manager, channels } = startPush(t);
   manager.handleWindowsPushKeyUp("Control+Space");
+  t.mock.timers.tick(350); // DOUBLE_TAP_WINDOW_MS with no second press
 
-  assert.deepEqual(channels(), ["prepare-dictation", "start-dictation", "stop-dictation"]);
+  assert.deepEqual(channels(), [
+    "prepare-dictation",
+    "start-dictation",
+    "cancel-dictation-preparation",
+    "cancel-hotkey-pressed",
+  ]);
+});
+
+// The pill can stop a locked recording; the next press must start a new one.
+test("a press after the pill stopped a locked recording starts a new push", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  t.after(() => t.mock.timers.reset());
+
+  const { manager, channels } = startPush(t);
+  manager.isDictating = () => false;
+  manager.handleWindowsPushKeyUp("Control+Space");
+  manager.startWindowsPushToTalk("Control+Space");
+  t.mock.timers.tick(1_000);
+  manager.startWindowsPushToTalk("Control+Space");
+
+  assert.deepEqual(channels(), ["prepare-dictation", "start-dictation", "prepare-dictation"]);
 });
 
 // The safety ceiling ends the push while the trigger keys are still physically

@@ -1983,8 +1983,8 @@
         "title": "外观"
       },
       "floatingIcon": {
-        "autoHide": "空闲时自动隐藏",
-        "autoHideDescription": "在开始听写前保持图标隐藏",
+        "alwaysVisible": "始终显示",
+        "alwaysVisibleDescription": "未在听写时也在屏幕上显示图标",
         "description": "控制听写图标在屏幕上的显示",
         "title": "悬浮图标",
         "startPosition": "起始位置",

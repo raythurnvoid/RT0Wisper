@@ -243,6 +243,8 @@ export default function SettingsPage({
     setDictationKey,
     autoLearnCorrections,
     setAutoLearnCorrections,
+    floatingIconAutoHide,
+    setFloatingIconAutoHide,
   } = useSettings();
 
   const voiceAgentKey = useSettingsStore((s) => s.voiceAgentKey);
@@ -412,6 +414,27 @@ export default function SettingsPage({
                     onDeviceSelect={setSelectedMicDevice}
                     onMicWarmHoldSecondsChange={setMicWarmHoldSeconds}
                   />
+                </SettingsPanelRow>
+              </SettingsPanel>
+            </div>
+
+            {/* Floating Icon */}
+            <div>
+              <SectionHeader
+                title={t("settingsPage.general.floatingIcon.title")}
+                description={t("settingsPage.general.floatingIcon.description")}
+              />
+              <SettingsPanel>
+                <SettingsPanelRow>
+                  <SettingsRow
+                    label={t("settingsPage.general.floatingIcon.alwaysVisible")}
+                    description={t("settingsPage.general.floatingIcon.alwaysVisibleDescription")}
+                  >
+                    <Toggle
+                      checked={!floatingIconAutoHide}
+                      onChange={(value) => setFloatingIconAutoHide(!value)}
+                    />
+                  </SettingsRow>
                 </SettingsPanelRow>
               </SettingsPanel>
             </div>

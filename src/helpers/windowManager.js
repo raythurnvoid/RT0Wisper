@@ -30,6 +30,9 @@ const {
 } = require("./dictationLifecycle");
 const { DEV_SERVER_PORT } = DevServerManager;
 const DRAG_MOVE_TOLERANCE_PX = 2;
+// Too short to say anything, so a press this short is a tap, not a dictation.
+const DOUBLE_TAP_MAX_PRESS_MS = 250;
+const DOUBLE_TAP_WINDOW_MS = 350;
 const {
   MAIN_WINDOW_CONFIG,
   CONTROL_PANEL_CONFIG,
@@ -793,8 +796,26 @@ class WindowManager {
     return required;
   }
 
+  // Double-tap locks the recording: a press released within DOUBLE_TAP_MAX_PRESS_MS
+  // keeps it running for DOUBLE_TAP_WINDOW_MS, a second press in that time locks
+  // it, and the next press stops it. Without a second press the tap is cancelled.
   startWindowsPushToTalk(key) {
     if (!this._isOnboardingInputAllowed("dictation")) return;
+    const state = this.winPushState;
+    if (state?.locked) {
+      clearTimeout(state.safetyTimeoutId);
+      this.winPushState = null;
+      // Not dictating means the pill already stopped it; this press starts anew.
+      if (this.isDictating()) {
+        this.sendStopDictation();
+        return;
+      }
+    } else if (state?.tapped && (!key || !state.key || key === state.key)) {
+      clearTimeout(state.tapTimeoutId);
+      state.tapped = false;
+      state.locked = true;
+      return;
+    }
     if (this.winPushState?.active || this.isDictationProcessing()) {
       return;
     }
@@ -846,15 +867,40 @@ class WindowManager {
       return;
     }
 
-    if (this.winPushState.safetyTimeoutId) {
-      clearTimeout(this.winPushState.safetyTimeoutId);
+    const state = this.winPushState;
+    if (reason === "release") {
+      // A locked recording ignores releases; waiting taps have no key down.
+      if (state.locked || state.tapped) return;
+      if (Date.now() - state.downTime < DOUBLE_TAP_MAX_PRESS_MS) {
+        state.tapped = true;
+        state.tapTimeoutId = setTimeout(() => {
+          if (this.winPushState === state) {
+            this.handleWindowsPushKeyUp(undefined, { reason: "tap" });
+          }
+        }, DOUBLE_TAP_WINDOW_MS);
+        return;
+      }
     }
 
-    const wasRecording = this.winPushState.isRecording;
+    clearTimeout(state.safetyTimeoutId);
+    clearTimeout(state.tapTimeoutId);
     this.winPushState = null;
 
-    if (reason !== "release") this._notifyPushForceStopped(reason);
+    if (state.tapped) {
+      // A lone tap: drop it instead of transcribing a split second of audio.
+      if (state.isRecording) {
+        this.sendCancelDictation();
+      } else {
+        this.sendCancelDictationPreparation();
+        this.hideDictationPanel();
+      }
+      return;
+    }
 
+    // Keys are up while locked, so the transcript can paste as usual.
+    if (reason !== "release" && !state.locked) this._notifyPushForceStopped(reason);
+
+    const wasRecording = state.isRecording;
     if (wasRecording) {
       this.sendStopDictation();
     } else {

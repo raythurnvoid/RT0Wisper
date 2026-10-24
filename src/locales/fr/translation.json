@@ -2277,8 +2277,8 @@
         "title": "Apparence"
       },
       "floatingIcon": {
-        "autoHide": "Masquer automatiquement au repos",
-        "autoHideDescription": "Garder l'icône masquée jusqu'au début de la dictée",
+        "alwaysVisible": "Toujours visible",
+        "alwaysVisibleDescription": "Garder l'icône à l'écran même quand vous ne dictez pas",
         "startPosition": "Position de départ",
         "startPositionDescription": "Emplacement du panneau d'enregistrement vocal à l'écran",
         "bottomRight": "En bas à droite",

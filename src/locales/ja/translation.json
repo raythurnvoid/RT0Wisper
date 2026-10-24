@@ -1983,8 +1983,8 @@
         "title": "外観"
       },
       "floatingIcon": {
-        "autoHide": "使用していないときに自動で非表示",
-        "autoHideDescription": "ディクテーション開始までアイコンを非表示にする",
+        "alwaysVisible": "常に表示",
+        "alwaysVisibleDescription": "ディクテーションしていないときもアイコンを画面に表示する",
         "description": "画面上のディクテーションアイコンの表示を制御",
         "title": "フローティングアイコン",
         "startPosition": "開始位置",

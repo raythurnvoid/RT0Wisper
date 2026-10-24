@@ -3638,8 +3638,8 @@
         "title": "المظهر"
       },
       "floatingIcon": {
-        "autoHide": "إخفاء تلقائي عند الخمول",
-        "autoHideDescription": "إبقاء الرمز مخفيًا حتى تبدأ في الإملاء",
+        "alwaysVisible": "مرئي دائمًا",
+        "alwaysVisibleDescription": "إبقاء الرمز على الشاشة حتى عندما لا تملي",
         "startPosition": "موضع البدء",
         "startPositionDescription": "مكان ظهور لوحة مسجل الصوت على الشاشة",
         "bottomRight": "أسفل اليمين",

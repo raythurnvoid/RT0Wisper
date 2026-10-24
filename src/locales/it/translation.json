@@ -1983,8 +1983,8 @@
         "title": "Aspetto"
       },
       "floatingIcon": {
-        "autoHide": "Nascondi automaticamente quando inattivo",
-        "autoHideDescription": "Mantieni l'icona nascosta finché non inizi a dettare",
+        "alwaysVisible": "Sempre visibile",
+        "alwaysVisibleDescription": "Mantieni l'icona sullo schermo anche quando non stai dettando",
         "description": "Controlla quando l'icona di dettatura è visibile sullo schermo",
         "title": "Icona flottante",
         "startPosition": "Posizione iniziale",

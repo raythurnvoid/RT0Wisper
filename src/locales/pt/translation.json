@@ -1962,8 +1962,8 @@
         "title": "Aparência"
       },
       "floatingIcon": {
-        "autoHide": "Ocultar automaticamente quando ocioso",
-        "autoHideDescription": "Mantenha o ícone oculto até iniciar o ditado",
+        "alwaysVisible": "Sempre visível",
+        "alwaysVisibleDescription": "Mantenha o ícone na tela mesmo quando não estiver ditando",
         "description": "Controle quando o ícone de ditado fica visível na tela",
         "title": "Ícone flutuante",
         "startPosition": "Posição inicial",

@@ -2035,8 +2035,8 @@
         "title": "Apariencia"
       },
       "floatingIcon": {
-        "autoHide": "Ocultar automáticamente cuando está inactivo",
-        "autoHideDescription": "Mantén el ícono oculto hasta que comiences a dictar",
+        "alwaysVisible": "Siempre visible",
+        "alwaysVisibleDescription": "Mantén el ícono en pantalla aunque no estés dictando",
         "description": "Controla cuándo es visible el ícono de dictado en tu pantalla",
         "title": "Ícono flotante",
         "startPosition": "Posición inicial",

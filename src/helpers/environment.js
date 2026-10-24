@@ -431,7 +431,8 @@ class EnvironmentManager {
   }
 
   getFloatingIconAutoHide() {
-    return this._getKey("FLOATING_ICON_AUTO_HIDE") === "true";
+    // RT0Wisper hides the idle pill by default; only an explicit "false" keeps it up.
+    return this._getKey("FLOATING_ICON_AUTO_HIDE") !== "false";
   }
 
   saveFloatingIconAutoHide(enabled) {

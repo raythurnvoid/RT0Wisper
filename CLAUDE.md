@@ -586,6 +586,11 @@ Native Windows support for true push-to-talk functionality using low-level keybo
 - `windows-key-listener:key-down`: Fired when hotkey pressed (start recording)
 - `windows-key-listener:key-up`: Fired when hotkey released (stop recording)
 
+**Double-tap lock** (Hold mode, Windows and Linux, `startWindowsPushToTalk` / `handleWindowsPushKeyUp`):
+
+- A press released within 250 ms is a tap. The recording keeps running for 350 ms; a second press in that time locks it, so releases are ignored and the next press stops it. A lone tap is cancelled, not transcribed
+- A locked recording the pill already stopped is dropped on the next press, which then starts a new push. A locked stop never reports `dictation-force-stopped`, since no keys are held
+
 ### 13. Custom Dictionary
 
 Improve transcription accuracy for specific words, names, or technical terms:
