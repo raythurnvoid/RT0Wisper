@@ -130,7 +130,6 @@ test("invalid completed cleanup keeps raw text across dictation routes", async (
     assert.equal(result, RAW);
     assert.equal(manager._takePendingResultExtras().cleanupFailure.messageKey, MESSAGE_KEY);
     let saved;
-    window.electronAPI.recordAnalyticsEvent = async () => {};
     window.electronAPI.saveTranscription = async (text, rawText) => {
       saved = { text, rawText };
       return { success: true };

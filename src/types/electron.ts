@@ -173,59 +173,6 @@ export interface TranscriptionItem {
   deleted_at: string | null;
 }
 
-export type AnalyticsMode = "local" | "openwhispr_cloud" | "byok" | "self_hosted" | "unknown";
-
-export interface AnalyticsEventInput {
-  eventId: string;
-  wordCount: number;
-  occurredAt: string;
-  localDate: string;
-  spokenDurationMs?: number | null;
-  mode: AnalyticsMode;
-  provider?: string | null;
-  model?: string | null;
-}
-
-export interface PendingAnalyticsEvent {
-  event_id: string;
-  occurred_at: string;
-  local_date: string;
-  word_count: number;
-  spoken_duration_ms: number | null;
-  mode: AnalyticsMode;
-  provider: string | null;
-  model: string | null;
-  counter_version: number;
-}
-
-export interface PendingAnalyticsClear {
-  cleared_through: string;
-}
-
-export interface AnalyticsSyncContext {
-  accountId: string;
-  authGeneration: number;
-}
-
-export interface AnalyticsDailyBucket {
-  date: string;
-  words: number;
-  dictations: number;
-  spokenDurationMs: number;
-}
-
-export interface AnalyticsSummary {
-  totalWords: number;
-  totalDictations: number;
-  totalSpokenDurationMs: number;
-  averageWpm: number | null;
-  currentStreakDays: number;
-  longestStreakDays: number;
-  wpmCoveragePercent: number;
-  daily: AnalyticsDailyBucket[];
-  historyBackfillRetryRequired?: boolean;
-}
-
 export interface NoteItem {
   id: number;
   title: string;
@@ -793,33 +740,6 @@ declare global {
         limit?: number,
         options?: { includeDiscarded?: boolean }
       ) => Promise<TranscriptionItem[]>;
-      recordAnalyticsEvent: (
-        input: AnalyticsEventInput
-      ) => Promise<{ success: boolean; eventId?: string; ignored?: boolean }>;
-      getAnalyticsSummary: () => Promise<AnalyticsSummary>;
-      getPendingAnalyticsEvents: (
-        limit?: number,
-        context?: AnalyticsSyncContext
-      ) => Promise<PendingAnalyticsEvent[]>;
-      markAnalyticsEventsSynced: (
-        eventIds: string[],
-        context?: AnalyticsSyncContext
-      ) => Promise<{ success: boolean; updated: number }>;
-      getPendingAnalyticsDeletes: (
-        limit?: number,
-        context?: AnalyticsSyncContext
-      ) => Promise<Array<{ event_id: string }>>;
-      hardDeleteAnalyticsEvents: (
-        eventIds: string[],
-        context?: AnalyticsSyncContext
-      ) => Promise<{ success: boolean; deleted: number }>;
-      getPendingAnalyticsClear: (
-        context?: AnalyticsSyncContext
-      ) => Promise<PendingAnalyticsClear | null>;
-      completeAnalyticsClear: (
-        clearedThrough: string,
-        context?: AnalyticsSyncContext
-      ) => Promise<{ success: boolean; deleted: number }>;
       clearTranscriptions: () => Promise<{ cleared: number; success: boolean }>;
       deleteTranscription: (id: number) => Promise<{ success: boolean }>;
 
@@ -909,7 +829,6 @@ declare global {
       onTranscriptionUpdated?: (callback: (item: TranscriptionItem) => void) => () => void;
       onTranscriptionDeleted?: (callback: (payload: { id: number }) => void) => () => void;
       onTranscriptionsCleared?: (callback: (payload: { cleared: number }) => void) => () => void;
-      onAnalyticsChanged?: (callback: () => void) => () => void;
 
       // API key management
       getOpenAIKey: () => Promise<string>;
@@ -1409,20 +1328,6 @@ declare global {
         code?: string;
       }>;
       cancelCloudReason?: () => void;
-
-      // Authenticated cloud API proxy (`public: true` skips the auth requirement)
-      cloudApiRequest?: (opts: {
-        method?: string;
-        path: string;
-        body?: unknown;
-        public?: boolean;
-        expectedAuthGeneration?: number;
-      }) => Promise<
-        {
-          success: boolean;
-          data?: unknown;
-        } & PolicyFailureMetadata
-      >;
 
       // BYOK audio file transcription
       transcribeAudioFileByok?: (options: { filePath: string; model: string }) => Promise<{

@@ -33,7 +33,7 @@ import { followsSystemDefaultMic } from "./micSelectionRecovery";
 import { isCacheableMicrophoneResolution, resolvePreferredMicrophone } from "./microphoneSelection";
 import { isStaleDeviceError } from "./staleMicDevice";
 import { shouldSaveDiscardedRecording } from "./discardedRecording";
-import { countSpokenWords, localDateKey, resolveAnalyticsMode } from "./analytics";
+import { countSpokenWords } from "./wordCount";
 import {
   getSettings,
   useSettingsStore,
@@ -2766,26 +2766,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
     const eventId = clientTranscriptionId || crypto.randomUUID();
     const occurredAt = analyticsOccurredAt ? new Date(analyticsOccurredAt) : new Date();
-    const metadata = this.lastAudioMetadata || {};
-    try {
-      await window.electronAPI.recordAnalyticsEvent({
-        eventId,
-        wordCount: countSpokenWords(rawText || text),
-        occurredAt: occurredAt.toISOString(),
-        localDate: localDateKey(occurredAt),
-        spokenDurationMs: metadata.durationMs || null,
-        mode: resolveAnalyticsMode(getSettings(), metadata.provider),
-        provider: metadata.provider || null,
-        model: metadata.model || null,
-      });
-    } catch (analyticsError) {
-      logger.warn(
-        "Failed to record local analytics event",
-        { error: analyticsError.message },
-        "analytics"
-      );
-    }
-
     try {
       const result = await window.electronAPI.saveTranscription(text, rawText, {
         clientTranscriptionId: eventId,

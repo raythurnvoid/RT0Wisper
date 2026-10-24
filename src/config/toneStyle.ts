@@ -27,9 +27,6 @@ export const DEFAULT_TONE_STYLES: ToneStyles = {
   other: "formal",
 };
 
-// Words dictated before the setup dialog opens by itself on Home.
-export const TONE_STYLE_PROMPT_MIN_WORDS = 70;
-
 /** What one dictation's cleanup is told: the app's category and the tone picked for it. */
 export interface DictationToneStyle {
   appCategory: ToneAppCategory;

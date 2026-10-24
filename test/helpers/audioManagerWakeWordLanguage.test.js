@@ -166,10 +166,10 @@ async function loadAudioManager(t) {
   };
 }
 
-test("local analytics save uses the propagated occurrence time", async (t) => {
+test("the saved transcription uses the propagated occurrence time", async (t) => {
   const { window, setSettings, createManager } = await loadAudioManager(t);
   const analyticsOccurredAt = "2026-09-02T14:00:00.000Z";
-  let recordedEvent;
+  let saveOptions;
 
   setSettings({
     dataRetentionEnabled: true,
@@ -177,17 +177,17 @@ test("local analytics save uses the propagated occurrence time", async (t) => {
     customDictionary: [],
     snippets: [],
   });
-  window.electronAPI.recordAnalyticsEvent = async (event) => {
-    recordedEvent = event;
+  window.electronAPI.saveTranscription = async (_text, _rawText, options) => {
+    saveOptions = options;
+    return {};
   };
-  window.electronAPI.saveTranscription = async () => ({});
 
   await createManager().saveTranscription("same event", "same event", {
     clientTranscriptionId: "event-1",
     analyticsOccurredAt,
   });
 
-  assert.equal(recordedEvent.occurredAt, analyticsOccurredAt);
+  assert.equal(saveOptions.analyticsOccurredAt, analyticsOccurredAt);
 });
 
 test("generic auto-language routing infers Arabic before an English UI fallback", async (t) => {

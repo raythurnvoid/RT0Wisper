@@ -138,24 +138,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("db-save-transcription", text, rawText, options),
   getTranscriptions: (limit, options) =>
     ipcRenderer.invoke("db-get-transcriptions", limit, options),
-  recordAnalyticsEvent: (input) => ipcRenderer.invoke("analytics-record-event", input),
   closeActivationStream: () => ipcRenderer.invoke("activation-close"),
   beginActivationCapture: () => ipcRenderer.invoke("activation-begin"),
   stopActivationCapture: (id) => ipcRenderer.invoke("activation-stop", id),
   finishActivationCapture: (id, words) => ipcRenderer.invoke("activation-finish", id, words),
   cancelActivationCapture: (id) => ipcRenderer.invoke("activation-cancel", id),
-  getAnalyticsSummary: () => ipcRenderer.invoke("analytics-get-summary"),
-  getPendingAnalyticsEvents: (limit, context) =>
-    ipcRenderer.invoke("analytics-get-pending", limit, context),
-  markAnalyticsEventsSynced: (eventIds, context) =>
-    ipcRenderer.invoke("analytics-mark-synced", eventIds, context),
-  getPendingAnalyticsDeletes: (limit, context) =>
-    ipcRenderer.invoke("analytics-get-pending-deletes", limit, context),
-  hardDeleteAnalyticsEvents: (eventIds, context) =>
-    ipcRenderer.invoke("analytics-hard-delete", eventIds, context),
-  getPendingAnalyticsClear: (context) => ipcRenderer.invoke("analytics-get-pending-clear", context),
-  completeAnalyticsClear: (clearedThrough, context) =>
-    ipcRenderer.invoke("analytics-complete-clear", clearedThrough, context),
   clearTranscriptions: () => ipcRenderer.invoke("db-clear-transcriptions"),
   deleteTranscription: (id) => ipcRenderer.invoke("db-delete-transcription", id),
 
@@ -224,11 +211,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const listener = (_event, transcription) => callback?.(transcription);
     ipcRenderer.on("transcription-updated", listener);
     return () => ipcRenderer.removeListener("transcription-updated", listener);
-  },
-  onAnalyticsChanged: (callback) => {
-    const listener = () => callback?.();
-    ipcRenderer.on("analytics-changed", listener);
-    return () => ipcRenderer.removeListener("analytics-changed", listener);
   },
 
   // BYOK API keys (get/save for every provider in the secretKeys manifest)
@@ -459,7 +441,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   cloudReason: (text, opts) => ipcRenderer.invoke("cloud-reason", text, opts),
   cancelCloudReason: () => ipcRenderer.send("cloud-reason-cancel"),
-  cloudApiRequest: (opts) => ipcRenderer.invoke("cloud-api-request", opts),
   getWorkspacePolicy: (accountId, expectedAuthGeneration) =>
     ipcRenderer.invoke("get-workspace-policy", accountId, expectedAuthGeneration),
   onWorkspacePolicyChanged: (callback) => {

@@ -703,10 +703,9 @@ export const useAudioRecording = (toast, options = {}) => {
           const persistencePromise = audioManagerRef.current
             .saveTranscription(result.text, result.rawText ?? result.text, {
               clientTranscriptionId: result.clientTranscriptionId,
-              // Spread rather than set: a result with no analytics timestamp
+              // Spread rather than set: a result with no occurrence timestamp
               // must not gain the key as undefined, matching how audioManager
-              // carries this field and keeping the options object exactly what
-              // callers without Insights data expect.
+              // carries this field.
               ...(result.analyticsOccurredAt
                 ? { analyticsOccurredAt: result.analyticsOccurredAt }
                 : {}),

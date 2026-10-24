@@ -5,7 +5,6 @@ const os = require("os");
 const { isRestorablePasteTarget } = require("./windowsPasteTarget");
 const crypto = require("crypto");
 const debugLogger = require("./debugLogger");
-const { ANALYTICS_HISTORY_BACKFILL_VERSION } = require("./analytics");
 const { broadcastToWindows } = require("./windowBroadcast");
 const { openExternalUrl } = require("./externalUrlOpener");
 const { BYOK_API_KEYS } = require("../config/secretKeys");
@@ -46,26 +45,6 @@ const serializeIpcError =
     }
   };
 
-// Analytics uploads cross two asynchronous boundaries: renderer -> main and
-// main -> cloud. Pin every local queue operation to the same authenticated
-// account generation so a delayed pass cannot adopt a replacement session.
-function assertAnalyticsSyncContext(context) {
-  if (context == null) return null;
-  const state = tokenStore.getState();
-  if (
-    typeof context !== "object" ||
-    typeof context.accountId !== "string" ||
-    context.accountId.length === 0 ||
-    !Number.isInteger(context.authGeneration) ||
-    !state.token ||
-    state.generation !== context.authGeneration
-  ) {
-    throw Object.assign(new Error("Authentication context changed during analytics sync"), {
-      code: "AUTH_CONTEXT_CHANGED",
-    });
-  }
-  return context.accountId;
-}
 const { resolveLocalServerNeeds, shouldStopLocalServer } = require("./localServerPolicy");
 const { i18nMain, changeLanguage } = require("./i18nMain");
 const { getCortiToken } = require("./cortiAuth");
@@ -233,7 +212,6 @@ class IPCHandlers {
     this._retentionSettingsSynced = false;
     this._noteFilesEnabled = false;
     this._granolaImportPending = null;
-    this._analyticsHistoryBackfillPromise = null;
     this.speakerDiarizationEnabled = true;
     // Default for the saved process-detection toggle. The engine keeps both detectors
     // off until the renderer syncs (see meetingDetectionPreferencePolicy.js).
@@ -271,102 +249,9 @@ class IPCHandlers {
     });
   }
 
-  // Reconstructing counters from the transcripts already on disk records exactly
-  // what "keep local history" turns off, so it answers to the same switch the
-  // live path checks in audioManager.saveTranscription. The main process boots
-  // with defaults rather than the user's choice, so an unsynced setting is not
-  // consent either -- the renderer's first sync is what starts this (#1370).
-  _canReconstructAnalyticsHistory() {
-    return this._retentionSettingsSynced && this._retentionSettings.dataRetentionEnabled;
-  }
-
   /** Whether a signed-in account is bound to this install. */
   _hasActiveAccountScope() {
     return Boolean(accountScopeBinding.read());
-  }
-
-  // The switch alone is not enough to start: a managed workspace can force local
-  // history off, and that policy arrives over the network while this scan takes
-  // milliseconds, so the renderer reports the permissive personal default until
-  // it lands. Waiting for the real answer is only possible where there is one --
-  // signed out the policy store stays idle forever and the user's own preference
-  // is the only authority there is. Mid-scan arrival needs no separate check:
-  // a policy that resolves "always_off" flips the switch, which the loop reads.
-  _mayStartAnalyticsHistoryReconstruction() {
-    if (!this._canReconstructAnalyticsHistory()) return false;
-    if (this._retentionSettings.localHistoryPolicyResolved === true) return true;
-    return !this._hasActiveAccountScope();
-  }
-
-  // Reconciliation is best-effort. Analytics reads await it so later-eligible
-  // history shows up before the numbers are read, which means a failure here
-  // must never fail the read itself: a broken scan would otherwise blank an
-  // Insights summary that SQLite could have answered perfectly well.
-  async _ensureAnalyticsHistoryBackfilled() {
-    if (!this._mayStartAnalyticsHistoryReconstruction()) return { inserted: 0, scanned: 0 };
-    if (this._analyticsHistoryBackfillPromise) return this._analyticsHistoryBackfillPromise;
-    // The failure is absorbed inside this promise rather than around the
-    // creator's await, because callers that join an in-flight pass are handed
-    // this promise directly and would otherwise receive the raw rejection --
-    // which is every analytics read that arrives while the startup pass is
-    // still scanning.
-    const backfillPromise = (async () => {
-      let inserted = 0;
-      let scanned = 0;
-      let skipped = 0;
-      let stoppedEarly = false;
-      const state = this.databaseManager.getAnalyticsHistoryBackfillState(
-        ANALYTICS_HISTORY_BACKFILL_VERSION
-      );
-      if (state.scannedThroughId >= state.targetId) return { inserted, scanned };
-      while (true) {
-        // The database reads its persisted cursor again for every batch. An
-        // older row made eligible while this pass yields can move that cursor
-        // backward without being overwritten by stale in-memory progress.
-        const batch = this.databaseManager.backfillAnalyticsHistoryBatch({
-          throughId: state.targetId,
-          checkpointVersion: ANALYTICS_HISTORY_BACKFILL_VERSION,
-        });
-        inserted += batch.inserted;
-        scanned += batch.scanned;
-        skipped += batch.skipped;
-        if (batch.complete) break;
-        await new Promise((resolve) => setImmediate(resolve));
-        // The switch can be turned off while this pass yields -- by the user, or
-        // by a managed policy that resolved after the renderer's first sync sent
-        // the personal default. Re-reading it here stops the scan at the next
-        // batch boundary instead of mining the rest of a history the user has
-        // just opted out of.
-        if (!this._canReconstructAnalyticsHistory()) {
-          stoppedEarly = true;
-          break;
-        }
-      }
-      if (inserted > 0) broadcastToWindows("analytics-changed");
-      if (scanned > 0) {
-        debugLogger.info(
-          stoppedEarly
-            ? "Analytics history backfill stopped: local history was turned off mid-scan"
-            : "Analytics history backfill complete",
-          { inserted, skipped, scanned },
-          "analytics"
-        );
-      }
-      return { inserted, scanned };
-    })().catch((error) => {
-      debugLogger.error("Analytics history backfill failed", { error: error.message }, "analytics");
-      return { inserted: 0, scanned: 0 };
-    });
-    this._analyticsHistoryBackfillPromise = backfillPromise;
-    // Cleared after the assignment above, never inside the pass: a scan that
-    // finishes without ever awaiting would otherwise strand its own resolved
-    // promise here and every later read would join a pass that already ended.
-    void backfillPromise.then(() => {
-      if (this._analyticsHistoryBackfillPromise === backfillPromise) {
-        this._analyticsHistoryBackfillPromise = null;
-      }
-    });
-    return backfillPromise;
   }
 
   // The dictation slot reports its own changes from the renderer. Slots
@@ -500,13 +385,12 @@ class IPCHandlers {
     const { audioRetentionDays, transcriptRetentionDays } = this._retentionSettings;
     try {
       if (transcriptRetentionDays > 0) {
-        const { ids, analyticsPurged } =
+        const { ids } =
           this.databaseManager.deleteTranscriptionsExpiredBefore(transcriptRetentionDays);
         for (const id of ids) {
           this.audioStorageManager.deleteAudio(id);
           broadcastToWindows("transcription-deleted", { id });
         }
-        if (analyticsPurged > 0) broadcastToWindows("analytics-changed");
       }
       if (audioRetentionDays > 0) {
         this.audioStorageManager.cleanupExpiredAudio(audioRetentionDays, this.databaseManager);
@@ -888,57 +772,6 @@ class IPCHandlers {
       return this.databaseManager.getTranscriptions(limit, options);
     });
 
-    ipcMain.handle("analytics-record-event", async (_event, input) => {
-      // The renderer only warns when this write fails, then saves the
-      // transcription as completed anyway -- leaving a row the backfill is
-      // the only thing that will ever reconcile.
-      const result = this.databaseManager.recordAnalyticsEvent(input);
-      // Dictation and the control panel are separate renderers, so the
-      // Insights view can only learn about a new event through the main process.
-      if (result?.success && !result.ignored) {
-        setImmediate(() => {
-          broadcastToWindows("analytics-changed");
-        });
-      }
-      return result;
-    });
-
-    ipcMain.handle("analytics-get-summary", async () => {
-      await this._ensureAnalyticsHistoryBackfilled();
-      return this.databaseManager.getAnalyticsSummary();
-    });
-
-    ipcMain.handle("analytics-get-pending", async (_event, limit, context) => {
-      const accountId = assertAnalyticsSyncContext(context);
-      await this._ensureAnalyticsHistoryBackfilled();
-      return this.databaseManager.getPendingAnalyticsEvents(limit, accountId);
-    });
-
-    ipcMain.handle("analytics-mark-synced", async (_event, eventIds, context) => {
-      const accountId = assertAnalyticsSyncContext(context);
-      return this.databaseManager.markAnalyticsEventsSynced(eventIds, accountId);
-    });
-
-    ipcMain.handle("analytics-get-pending-deletes", async (_event, limit, context) => {
-      const accountId = assertAnalyticsSyncContext(context);
-      return this.databaseManager.getPendingAnalyticsDeletes(limit, accountId);
-    });
-
-    ipcMain.handle("analytics-hard-delete", async (_event, eventIds, context) => {
-      const accountId = assertAnalyticsSyncContext(context);
-      return this.databaseManager.hardDeleteAnalyticsEvents(eventIds, accountId);
-    });
-
-    ipcMain.handle("analytics-get-pending-clear", async (_event, context) => {
-      const accountId = assertAnalyticsSyncContext(context);
-      return this.databaseManager.getPendingAnalyticsClear(accountId);
-    });
-
-    ipcMain.handle("analytics-complete-clear", async (_event, clearedThrough, context) => {
-      const accountId = assertAnalyticsSyncContext(context);
-      return this.databaseManager.completeAnalyticsClear(clearedThrough, accountId);
-    });
-
     ipcMain.handle("db-clear-transcriptions", async (event) => {
       this.audioStorageManager.deleteAllAudio();
       const result = this.databaseManager.clearTranscriptions();
@@ -947,7 +780,6 @@ class IPCHandlers {
           broadcastToWindows("transcriptions-cleared", {
             cleared: result.cleared,
           });
-          broadcastToWindows("analytics-changed");
         });
       }
       return result;
@@ -1018,10 +850,6 @@ class IPCHandlers {
           this._retentionSettings = settings;
           this._retentionSettingsSynced = true;
           this._runRetentionCleanup();
-          // First point at which the local-history switch is known to be real.
-          // After the sweep, so expired transcripts are gone before they can be
-          // reconstructed into counters the sweep would only have to purge.
-          void this._ensureAnalyticsHistoryBackfilled();
         },
       })
     );
@@ -3074,13 +2902,6 @@ class IPCHandlers {
     // Electron doesn't auto-attach jar cookies on top of our explicit headers.
     const proxyFetch = (url, init = {}) => net.fetch(url, { ...init, useSessionCookies: false });
     const withPolicyHeaders = (headers) => withPolicyRequestHeaders(headers, app.getVersion());
-    const handleCloudApiRequest = createCloudApiRequestHandler({
-      getApiUrl,
-      getAppVersion: () => app.getVersion(),
-      proxyFetch,
-      tokenStore,
-      logger: debugLogger,
-    });
     try {
       const ActivationDatabase = require("better-sqlite3");
       const activationDb = new ActivationDatabase(
@@ -3269,8 +3090,6 @@ class IPCHandlers {
         if (updated) {
           setImmediate(() => {
             broadcastToWindows("transcription-updated", updated);
-            // A row that just reached "completed" is newly eligible.
-            void this._ensureAnalyticsHistoryBackfilled();
           });
         }
         return { success: true, transcription: updated };
@@ -3778,8 +3597,6 @@ class IPCHandlers {
       if (typeof requestId !== "string" || !requestId.trim()) return;
       this._agentStreamRequests.cancel(event.sender.id, requestId);
     });
-
-    ipcMain.handle("cloud-api-request", (_event, opts) => handleCloudApiRequest(opts));
 
     ipcMain.handle("get-workspace-policy", async (event, accountId, expectedAuthGeneration) => {
       const authHeaders = await getAuthHeader(event);
