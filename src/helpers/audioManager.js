@@ -129,7 +129,6 @@ import { resolveDictationTranslationInference } from "./dictationTranslationInfe
 import { resolvePrompt, appendScreenContextSuffix } from "../config/prompts";
 import { resolveDictationToneStyle } from "../config/toneStyle";
 import { selectionEditToneSentence } from "../config/prompts/toneStyle";
-import { syncService } from "../services/SyncService.js";
 import { evaluateFinishedRecording, withSalvageWarning } from "./recordingValidation";
 import { isEmptyRecording } from "./recordingGuard";
 import { startRecordingSpool, takeInterruptedRecordings } from "./recordingSpool";
@@ -4533,7 +4532,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         routeKind: this.translationRequested ? "translation" : null,
         analyticsOccurredAt: occurredAt.toISOString(),
       });
-      if (result?.id) syncService.debouncedPush("transcription", result.id);
 
       // Save audio if we have a captured blob and the transcription was saved successfully
       if (result?.id && this.lastAudioBlob) {
@@ -4649,8 +4647,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           model: null,
         });
       }
-
-      syncService.debouncedPush("transcription", savedId);
     } catch (error) {
       logger.error(
         "Failed to save discarded transcription record",
@@ -4721,7 +4717,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         { durationMs, provider: null, model: null }
       );
       if (!audioResult?.success) throw new Error("Failed to save recovered audio");
-      syncService.debouncedPush("transcription", savedId);
       logger.info("Recovered interrupted recording", { id: savedId, durationMs }, "audio");
       return true;
     } catch (error) {

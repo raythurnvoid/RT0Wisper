@@ -128,20 +128,16 @@ const { transcribeWithGemini } = require("./geminiTranscription");
 const AudioStorageManager = require("./audioStorage");
 const LocalModelDownloadStatus = require("./localModelDownloadStatus");
 const AgentStreamRequestRegistry = require("./agentStreamRequestRegistry");
-const liveSpeakerIdentifier = require("./liveSpeakerIdentifier");
 const { applySmartSpacing } = require("./smartSpacing");
 const { applyAutoLearnSetting } = require("./autoLearnSetting");
 const {
   DEFAULT_RETENTION_SETTINGS,
   createRetentionSettingsHandler,
 } = require("./retentionSettings");
-const { applyConfirmedSpeaker, canAutoRelabelSpeaker } = require("./speakerAssignmentPolicy");
-const { normalizeStoredSpeakerCount } = require("./speakerCount");
 const { pcm16ToWav } = require("../utils/audioUtils");
 const postMigrationDetector = require("./postMigrationDetector");
 const screenContextCapture = require("./screenContextCapture");
 const { classifyToneAppCategory } = require("./toneAppCategories");
-const { MAX_SPEAKER_COUNT } = require("../constants/speakerDetection.json");
 const { UPLOAD_AUDIO_EXTENSIONS } = require("../constants/uploadAudioFormats.json");
 const { providerContentType, prepareProviderUpload } = require("./providerUploadAudio");
 const {
@@ -149,7 +145,10 @@ const {
   sanitizeWhisperVadConfig,
   resolveContextSileroEnabled,
 } = require("./whisperVadConfig");
-const { createServerTokenPoster, fetchRealtimeTokenForProvider } = require("./realtimeTokenProviders");
+const {
+  createServerTokenPoster,
+  fetchRealtimeTokenForProvider,
+} = require("./realtimeTokenProviders");
 
 const MISTRAL_TRANSCRIPTION_URL = "https://api.mistral.ai/v1/audio/transcriptions";
 
@@ -647,20 +646,6 @@ class IPCHandlers {
     }
   }
 
-  createFolderWithEffects(name, spaceId) {
-    const result = this.databaseManager.createFolder(name, spaceId);
-    if (result?.success && result?.folder) {
-      setImmediate(() => {
-        broadcastToWindows("folder-created", result.folder);
-        if (this._noteFilesEnabled) {
-          const markdownMirror = require("./markdownMirror");
-          markdownMirror.ensureFolder(result.folder.name);
-        }
-      });
-    }
-    return result;
-  }
-
   _handleAuthTokenChange({ generation, token }) {
     this.enterpriseIdentityManager?.clear();
     if (!token) {
@@ -862,18 +847,6 @@ class IPCHandlers {
     };
   }
 
-  _mirrorDeleteFolderIfUnshared(folderName) {
-    if (!this._noteFilesEnabled) return;
-    // Folder names are only unique per space — a live same-named folder in
-    // another space shares the mirror directory, so leave it on disk.
-    const stillLive = this.databaseManager.db
-      .prepare("SELECT 1 FROM folders WHERE name = ? AND deleted_at IS NULL")
-      .get(folderName);
-    if (stillLive) return;
-    const markdownMirror = require("./markdownMirror");
-    markdownMirror.deleteFolder(folderName);
-  }
-
   _asyncMirrorWrite(note) {
     if (!this._noteFilesEnabled) {
       debugLogger.debug(
@@ -911,78 +884,6 @@ class IPCHandlers {
       map[m.speaker_id] = m.display_name;
     }
     return map;
-  }
-
-  _parseNonSelfParticipants(participantsJson) {
-    if (!participantsJson) return [];
-    let participants;
-    try {
-      participants = JSON.parse(participantsJson);
-    } catch (_) {
-      return [];
-    }
-    if (!Array.isArray(participants) || participants.length === 0) return [];
-    const googleEmails = new Set(
-      this.databaseManager.getGoogleAccounts().map((a) => a.email.toLowerCase())
-    );
-    // Rooms aren't speakers; notes linked before rooms were left out may hold them.
-    return participants.filter(
-      (p) =>
-        p &&
-        p.self !== true &&
-        p.resource !== true &&
-        !googleEmails.has((p.email || "").toLowerCase())
-    );
-  }
-
-  _resolveOneOnOneOtherParticipant(participantsJson) {
-    const others = this._parseNonSelfParticipants(participantsJson);
-    if (others.length !== 1) return null;
-    const displayName = others[0].displayName || others[0].email;
-    if (!displayName) return null;
-    const email = (others[0].email || "").toLowerCase().trim() || null;
-    return { displayName, email };
-  }
-
-  _noteExpectedSpeakerCountOrNull(note) {
-    const stored = normalizeStoredSpeakerCount(note?.expected_speaker_count);
-    if (stored != null) {
-      return stored;
-    }
-    const others = this._parseNonSelfParticipants(note?.participants).length;
-    if (others > 0) {
-      return Math.min(others + 1, MAX_SPEAKER_COUNT);
-    }
-    return null;
-  }
-
-  // Participants added mid-meeting must raise the speaker cap that was derived
-  // from the note at recording start. A count the user set via the stepper
-  // (explicit) is never overridden.
-  //
-  // Raise-only: lowering the cap below the clusters already discovered would make
-  // _assignOrForceCluster fold every later voice onto an existing speaker — the
-  // exact identity collapse this refresh exists to prevent. A roster that shrinks
-  // (or empties) mid-meeting therefore leaves the cap where it is.
-  _refreshMeetingSpeakerConfigFromNote(noteId, note) {
-    const config = this.activeMeetingSpeakerConfig;
-    if (!config || config.explicit) return;
-    if (noteId == null || this._activeMeetingNoteId !== noteId) return;
-
-    const expectedCount = this._noteExpectedSpeakerCountOrNull(note);
-    if (expectedCount == null || expectedCount <= config.expectedCount) return;
-
-    this.activeMeetingSpeakerConfig = { ...config, expectedCount };
-    liveSpeakerIdentifier.setMaxSpeakers(Math.max(1, expectedCount - 1));
-    broadcastToWindows("meeting-session-speaker-config-updated", {
-      enabled: config.enabled,
-      expectedCount,
-    });
-    debugLogger.info(
-      "Meeting speaker config refreshed from participants",
-      { noteId, expectedCount },
-      "speaker"
-    );
   }
 
   _getFolderName(folderId) {
@@ -1634,10 +1535,6 @@ class IPCHandlers {
       })
     );
 
-    ipcMain.handle("get-transcription-by-id", async (event, id) => {
-      return this.databaseManager.getTranscriptionById(id);
-    });
-
     // Hotkey handlers run in main, while AudioManager owns the real lifecycle
     // in the dictation renderer. Only confirmed renderer state may change the
     // main-process recording gate; raw key presses are merely requests and can
@@ -1717,42 +1614,6 @@ class IPCHandlers {
       return this.databaseManager.applyDictionaryChanges({ add, remove });
     });
 
-    ipcMain.handle("db-get-pending-dictionary", async () => {
-      return this.databaseManager.getPendingDictionary();
-    });
-
-    ipcMain.handle("db-get-pending-dictionary-deletes", async () => {
-      return this.databaseManager.getPendingDictionaryDeletes();
-    });
-
-    ipcMain.handle("db-get-dictionary-by-client-id", async (_event, clientDictId) => {
-      return this.databaseManager.getDictionaryEntryByClientId(clientDictId);
-    });
-
-    ipcMain.handle("db-upsert-dictionary-from-cloud", async (_event, cloudEntry) => {
-      return this.databaseManager.upsertDictionaryFromCloud(cloudEntry);
-    });
-
-    ipcMain.handle("db-mark-dictionary-synced", async (_event, id, cloudId) => {
-      return this.databaseManager.markDictionaryEntrySynced(id, cloudId);
-    });
-
-    ipcMain.handle("db-hard-delete-dictionary", async (_event, id) => {
-      return this.databaseManager.hardDeleteDictionaryEntry(id);
-    });
-
-    ipcMain.handle("db-clear-dictionary-cloud-id", async (_event, id) => {
-      return this.databaseManager.clearDictionaryCloudId(id);
-    });
-
-    ipcMain.handle("db-broadcast-dictionary-updated", async () => {
-      // Emit the normalized list straight from SQLite so renderers see the
-      // post-dedupe truth, never a caller-supplied payload.
-      const words = this.databaseManager.getDictionary();
-      broadcastToWindows("dictionary-updated", words);
-      return { success: true };
-    });
-
     ipcMain.handle("db-get-snippets", async () => {
       return this.databaseManager.getSnippets();
     });
@@ -1762,49 +1623,6 @@ class IPCHandlers {
         throw new Error("snippets must be an array");
       }
       return this.databaseManager.setSnippets(snippets);
-    });
-
-    ipcMain.handle("db-get-pending-snippets", async () => {
-      return this.databaseManager.getPendingSnippets();
-    });
-
-    ipcMain.handle("db-get-pending-snippet-deletes", async () => {
-      return this.databaseManager.getPendingSnippetDeletes();
-    });
-
-    ipcMain.handle("db-get-snippet-for-cloud-merge", async (_event, cloudEntry) => {
-      return this.databaseManager.getSnippetForCloudMerge(cloudEntry);
-    });
-
-    ipcMain.handle("db-upsert-snippet-from-cloud", async (_event, cloudEntry) => {
-      return this.databaseManager.upsertSnippetFromCloud(cloudEntry);
-    });
-
-    ipcMain.handle(
-      "db-mark-snippet-synced",
-      async (_event, id, cloudId, serverUpdatedAt, expectedTrigger, expectedReplacement) => {
-        return this.databaseManager.markSnippetSynced(
-          id,
-          cloudId,
-          serverUpdatedAt,
-          expectedTrigger,
-          expectedReplacement
-        );
-      }
-    );
-
-    ipcMain.handle("db-hard-delete-snippet", async (_event, id) => {
-      return this.databaseManager.hardDeleteSnippet(id);
-    });
-
-    ipcMain.handle("db-clear-snippet-cloud-id", async (_event, id) => {
-      return this.databaseManager.clearSnippetCloudId(id);
-    });
-
-    ipcMain.handle("db-broadcast-snippets-updated", async () => {
-      const snippets = this.databaseManager.getSnippets();
-      broadcastToWindows("snippets-updated", snippets);
-      return { success: true };
     });
 
     ipcMain.handle("undo-learned-corrections", async (_event, words) => {
@@ -1830,97 +1648,6 @@ class IPCHandlers {
         debugLogger.debug("[AutoLearn] Undo failed", { error: err.message });
         return { success: false };
       }
-    });
-
-    ipcMain.handle("db-get-note", async (event, id) => {
-      return this.databaseManager.getNote(id);
-    });
-
-    ipcMain.handle("db-get-notes", async (event, noteType, limit, folderId, spaceId) => {
-      return this.databaseManager.getNotes(noteType, limit, folderId, spaceId);
-    });
-
-    ipcMain.handle("db-update-note", async (event, id, updates, options) => {
-      const result = this.databaseManager.updateNote(id, updates, options);
-      if (result?.success && result?.note) {
-        setImmediate(() => broadcastToWindows("note-updated", result.note));
-        this._asyncMirrorWrite(result.note);
-        if (updates.participants) {
-          this._tryAutoLabelOneOnOne(id);
-          this._refreshMeetingSpeakerConfigFromNote(id, result.note);
-        }
-      }
-      return result;
-    });
-
-    ipcMain.handle("db-delete-note", async (event, id) => {
-      return this.deleteNoteInternal(id);
-    });
-
-    ipcMain.handle("db-update-note-share-state", async (event, id, state) => {
-      const note = this.databaseManager.updateNoteShareState(id, state);
-      if (note) {
-        setImmediate(() => broadcastToWindows("note-updated", note));
-      }
-      return note;
-    });
-
-    ipcMain.handle("db-get-folders", async (event, spaceId) => {
-      return this.databaseManager.getFolders(spaceId);
-    });
-
-    ipcMain.handle("db-create-folder", (_event, name, spaceId) =>
-      this.createFolderWithEffects(name, spaceId)
-    );
-
-    ipcMain.handle("db-delete-folder", async (event, id) => {
-      const folderName = this._noteFilesEnabled ? this._getFolderName(id) : null;
-      const result = this.databaseManager.deleteFolder(id);
-      if (result?.success) {
-        // Other accounts' notes were released to the space root; their mirror
-        // files leave with the folder directory, so rewrite the live ones.
-        for (const note of result.relocatedNotes ?? []) {
-          if (!note.deleted_at) this._asyncMirrorWrite(note);
-        }
-        setImmediate(() => {
-          broadcastToWindows("folder-deleted", { id });
-          if (folderName) this._mirrorDeleteFolderIfUnshared(folderName);
-        });
-      }
-      return result;
-    });
-
-    ipcMain.handle("db-rename-folder", async (event, id, name) => {
-      const oldName = this._noteFilesEnabled ? this._getFolderName(id) : null;
-      const result = this.databaseManager.renameFolder(id, name);
-      if (result?.success && result?.folder) {
-        setImmediate(() => {
-          broadcastToWindows("folder-renamed", result.folder);
-          if (this._noteFilesEnabled && oldName) {
-            const markdownMirror = require("./markdownMirror");
-            markdownMirror.renameFolder(oldName, name);
-          }
-        });
-      }
-      return result;
-    });
-
-    ipcMain.handle("db-move-folder-to-space", async (event, id, spaceId) => {
-      const result = this.databaseManager.moveFolderToSpace(id, spaceId);
-      if (result?.success) {
-        if (result.folder) {
-          setImmediate(() => broadcastToWindows("folder-synced", result.folder));
-        }
-      }
-      return result;
-    });
-
-    ipcMain.handle("db-get-folder-note-counts", async () => {
-      return this.databaseManager.getFolderNoteCounts();
-    });
-
-    ipcMain.handle("db-get-spaces", async () => {
-      return this.databaseManager.getSpaces();
     });
 
     ipcMain.handle("set-active-account-scope", async (_event, accountId, expectedGeneration) => {
@@ -1959,47 +1686,6 @@ class IPCHandlers {
       })
     );
 
-    ipcMain.handle("db-update-space", async (event, id, updates) => {
-      const result = this.databaseManager.updateSpace(id, updates);
-      if (result?.success && result.space) {
-        setImmediate(() => broadcastToWindows("space-synced", result.space));
-      }
-      return result;
-    });
-
-    ipcMain.handle("db-purge-space", async (event, id, options) => {
-      if (options?.expectedAuthGeneration !== undefined) {
-        const state = tokenStore.getState();
-        if (!state.token || state.generation !== options.expectedAuthGeneration) {
-          return {
-            success: false,
-            error: "Authentication context changed before account cleanup",
-            code: "AUTH_CONTEXT_CHANGED",
-          };
-        }
-      }
-      const result = this.databaseManager.purgeSpace(id, options);
-      if (result?.success) {
-        if (!result.preservedForOtherAccounts) {
-          // The purge row and the relocated notes' trigger rows drain together.
-          this.databaseManager.addPendingVectorPurge(result.spaceId);
-          for (const note of result.relocatedNotes ?? []) {
-            this._asyncMirrorWrite(note);
-          }
-          for (const noteId of result.noteIds ?? []) {
-            this._asyncMirrorDelete(noteId);
-          }
-        }
-        setImmediate(() => {
-          broadcastToWindows("space-purged", { spaceId: result.spaceId });
-          for (const folderName of result.folderNames ?? []) {
-            this._mirrorDeleteFolderIfUnshared(folderName);
-          }
-        });
-      }
-      return result;
-    });
-
     // Agent conversation handlers
     ipcMain.handle(
       "db-create-agent-conversation",
@@ -2024,249 +1710,6 @@ class IPCHandlers {
         return result;
       }
     );
-
-    // Notes sync
-    ipcMain.handle("db-get-pending-notes", (_, spaceKind) =>
-      this.databaseManager.getPendingNotes(spaceKind)
-    );
-    ipcMain.handle("db-get-pending-note-deletes", () =>
-      this.databaseManager.getPendingNoteDeletes()
-    );
-    ipcMain.handle("db-get-note-by-client-id", (_, clientNoteId) =>
-      this.databaseManager.getNoteByClientId(clientNoteId)
-    );
-    ipcMain.handle("db-upsert-note-from-cloud", (_, cloudNote, localFolderId, localSpaceId) => {
-      const note = this.databaseManager.upsertNoteFromCloud(cloudNote, localFolderId, localSpaceId);
-      if (note) {
-        setImmediate(() => broadcastToWindows("note-synced", note));
-      }
-      return note;
-    });
-    ipcMain.handle(
-      "db-acknowledge-note-create",
-      (_, id, snapshot, cloudId, cloudUpdatedAt, ownerUserId, options) => {
-        const result = this.databaseManager.acknowledgeNoteCreate(
-          id,
-          snapshot,
-          cloudId,
-          cloudUpdatedAt,
-          ownerUserId,
-          options
-        );
-        if (result.note) {
-          setImmediate(() => broadcastToWindows("note-synced", result.note));
-        }
-        return result;
-      }
-    );
-    ipcMain.handle(
-      "db-mark-note-synced-if-unchanged",
-      (_, id, snapshot, expectedCloudId, cloudUpdatedAt, ownerUserId, cloudRevision, cloudNote) => {
-        const result = this.databaseManager.markNoteSyncedIfUnchanged(
-          id,
-          snapshot,
-          expectedCloudId,
-          cloudUpdatedAt,
-          ownerUserId,
-          cloudRevision,
-          cloudNote
-        );
-        // The ack took the server's copy of a field: refresh open editors.
-        if (result.note) {
-          setImmediate(() => broadcastToWindows("note-synced", result.note));
-        }
-        return result;
-      }
-    );
-    ipcMain.handle("db-set-note-cloud-base", (_, id, cloudUpdatedAt, cloudRevision, options) =>
-      this.databaseManager.setNoteCloudBase(id, cloudUpdatedAt, cloudRevision, options)
-    );
-    ipcMain.handle("db-set-note-owner-from-cloud", (_, id, ownerUserId) =>
-      this.databaseManager.setNoteOwnerFromCloud(id, ownerUserId)
-    );
-    ipcMain.handle("db-count-notes-missing-revision", (_, spaceKind) =>
-      this.databaseManager.countNotesMissingRevision(spaceKind)
-    );
-    ipcMain.handle("db-count-team-notes-missing-owner", () =>
-      this.databaseManager.countTeamNotesMissingOwner()
-    );
-    ipcMain.handle("db-mark-note-sync-error", (_, id) =>
-      this.databaseManager.markNoteSyncError(id)
-    );
-    ipcMain.handle("db-restore-note-after-denied-delete", (_, id) =>
-      this.databaseManager.restoreNoteAfterDeniedDelete(id)
-    );
-    ipcMain.handle("db-hard-delete-note", (_, id) => {
-      const result = this.databaseManager.hardDeleteNote(id);
-      if (result?.success) {
-        this._asyncMirrorDelete(id);
-        setImmediate(() => broadcastToWindows("note-deleted", { id }));
-      }
-      return result;
-    });
-
-    // Folders sync
-    ipcMain.handle("db-get-pending-folders", (_, spaceKind) =>
-      this.databaseManager.getPendingFolders(spaceKind)
-    );
-    ipcMain.handle("db-get-folder-by-client-id", (_, clientFolderId) =>
-      this.databaseManager.getFolderByClientId(clientFolderId)
-    );
-    ipcMain.handle("db-upsert-folder-from-cloud", (_, cloudFolder, localSpaceId) => {
-      const folder = this.databaseManager.upsertFolderFromCloud(cloudFolder, localSpaceId);
-      if (folder) setImmediate(() => broadcastToWindows("folder-synced", folder));
-      return folder;
-    });
-    ipcMain.handle(
-      "db-acknowledge-folder-create",
-      (_, id, snapshot, expectedCloudId, responseClientFolderId, cloudId, cloudUpdatedAt) =>
-        this.databaseManager.acknowledgeFolderCreate(
-          id,
-          snapshot,
-          expectedCloudId,
-          responseClientFolderId,
-          cloudId,
-          cloudUpdatedAt
-        )
-    );
-    ipcMain.handle("db-mark-folder-synced-if-unchanged", (_, id, snapshot, expectedCloudId) =>
-      this.databaseManager.markFolderSyncedIfUnchanged(id, snapshot, expectedCloudId)
-    );
-    ipcMain.handle("db-get-folder-id-map", () => this.databaseManager.getFolderIdMap());
-    ipcMain.handle("db-get-pending-folder-deletes", () =>
-      this.databaseManager.getPendingFolderDeletes()
-    );
-    ipcMain.handle("db-restore-folder-after-denied-delete", (_, id) => {
-      const result = this.databaseManager.restoreFolderAfterDeniedDelete(id);
-      if (result?.success) {
-        for (const note of result.notes ?? []) {
-          this._asyncMirrorWrite(note);
-        }
-        setImmediate(() => {
-          if (result.folder) broadcastToWindows("folder-synced", result.folder);
-          for (const note of result.notes ?? []) {
-            broadcastToWindows("note-synced", note);
-          }
-        });
-      }
-      return result;
-    });
-    ipcMain.handle("db-hard-delete-folder", (_, id) => {
-      const result = this.databaseManager.hardDeleteFolder(id);
-      if (result?.success) {
-        // Other accounts' notes were released to the space root; their mirror
-        // files leave with the folder directory, so rewrite the live ones.
-        for (const note of result.relocatedNotes ?? []) {
-          if (!note.deleted_at) this._asyncMirrorWrite(note);
-        }
-        setImmediate(() => {
-          broadcastToWindows("folder-deleted", { id });
-          if (result.name) this._mirrorDeleteFolderIfUnshared(result.name);
-        });
-      }
-      return result;
-    });
-    ipcMain.handle("db-relocate-revoked-folder", (_, id, privateSpaceId, preserveFolder) => {
-      const result = this.databaseManager.relocateRevokedFolder(id, privateSpaceId, preserveFolder);
-      if (result?.success) {
-        // The triggers journaled the relocated and deleted notes. Mirror files live by
-        // folder, so rewrite the relocated notes and drop the server-owned ones.
-        for (const note of result.relocatedNotes ?? []) {
-          this._asyncMirrorWrite(note);
-        }
-        for (const noteId of result.deletedNoteIds ?? []) {
-          this._asyncMirrorDelete(noteId);
-        }
-        setImmediate(() => {
-          if (result.folder) broadcastToWindows("folder-synced", result.folder);
-          else broadcastToWindows("folder-deleted", { id });
-          for (const note of result.relocatedNotes ?? []) {
-            broadcastToWindows("note-updated", note);
-          }
-          for (const noteId of result.deletedNoteIds ?? []) {
-            broadcastToWindows("note-deleted", { id: noteId });
-          }
-          const folderGone = !result.folder || result.folder.name !== result.folderName;
-          if (result.folderName && folderGone) {
-            this._mirrorDeleteFolderIfUnshared(result.folderName);
-          }
-        });
-      }
-      return result;
-    });
-
-    // Renderer-side sync events (conflicts, revocation toasts, …) happen in
-    // whichever window ran the pass — rebroadcast them to ALL windows.
-    ipcMain.handle("broadcast-sync-event", (_, name, payload) => {
-      broadcastToWindows("sync-event", { name, payload });
-      return { success: true };
-    });
-
-    // Spaces sync
-    ipcMain.handle("db-upsert-space-from-cloud", (_, cloudSpace) => {
-      const space = this.databaseManager.upsertSpaceFromCloud(cloudSpace);
-      if (space) setImmediate(() => broadcastToWindows("space-synced", space));
-      return space;
-    });
-    ipcMain.handle("db-set-space-sync-status", (_, id, status) => {
-      const result = this.databaseManager.setSpaceSyncStatus(id, status);
-      if (result?.success && result.space) {
-        // Live skeleton toggling: the tree keys pending/synced off this flag.
-        setImmediate(() => broadcastToWindows("space-synced", result.space));
-      }
-      return result;
-    });
-
-    // Conversations sync
-    ipcMain.handle("db-get-pending-conversations", () =>
-      this.databaseManager.getPendingConversations()
-    );
-    ipcMain.handle("db-get-pending-conversation-deletes", () =>
-      this.databaseManager.getPendingConversationDeletes()
-    );
-    ipcMain.handle("db-get-conversation-by-client-id", (_, clientId) =>
-      this.databaseManager.getConversationByClientId(clientId)
-    );
-    ipcMain.handle("db-upsert-conversation-from-cloud", (_, cloudConv, messages) =>
-      this.databaseManager.upsertConversationFromCloud(cloudConv, messages)
-    );
-    ipcMain.handle("db-acknowledge-conversation-create", (_, id, snapshot, cloudId) =>
-      this.databaseManager.acknowledgeConversationCreate(id, snapshot, cloudId)
-    );
-    ipcMain.handle("db-mark-conversation-synced", (_, id, cloudId) =>
-      this.databaseManager.markConversationSynced(id, cloudId)
-    );
-    ipcMain.handle("db-hard-delete-conversation", (_, id) => {
-      const result = this.databaseManager.hardDeleteConversation(id);
-      if (result?.success) {
-        setImmediate(() => broadcastToWindows("conversation-deleted", { id }));
-      }
-      return result;
-    });
-
-    // Transcriptions sync
-    ipcMain.handle("db-get-pending-transcriptions", () =>
-      this.databaseManager.getPendingTranscriptions()
-    );
-    ipcMain.handle("db-get-transcription-by-client-id", (_, clientId) =>
-      this.databaseManager.getTranscriptionByClientId(clientId)
-    );
-    ipcMain.handle("db-upsert-transcription-from-cloud", (_, cloudTranscription) => {
-      return this.databaseManager.upsertTranscriptionFromCloud(cloudTranscription);
-    });
-    ipcMain.handle("db-mark-transcription-synced", (_, id, cloudId) =>
-      this.databaseManager.markTranscriptionSynced(id, cloudId)
-    );
-    ipcMain.handle("db-get-pending-transcription-deletes", () =>
-      this.databaseManager.getPendingTranscriptionDeletes()
-    );
-    ipcMain.handle("db-hard-delete-transcription", (_, id) => {
-      const result = this.databaseManager.hardDeleteTranscription(id);
-      if (result?.success) {
-        setImmediate(() => broadcastToWindows("transcription-deleted", { id }));
-      }
-      return result;
-    });
 
     ipcMain.handle("export-dictionary", async (event, words) => {
       try {
@@ -6558,8 +6001,6 @@ class IPCHandlers {
       return this.updateManager.getAppVersion();
     });
 
-    ipcMain.handle("get-oauth-protocol-registered", () => this.oauthProtocolRegistered);
-
     ipcMain.handle("get-oauth-protocol", () => this.oauthProtocol);
 
     ipcMain.handle("mark-bundle-migrated", () => {
@@ -7459,144 +6900,6 @@ class IPCHandlers {
 
     ipcMain.handle("get-pending-settings-section", async () => {
       return this.windowManager?.consumePendingSettingsSection() ?? null;
-    });
-  }
-
-  _retroactiveMapping(profile) {
-    setImmediate(async () => {
-      try {
-        const speakerEmbeddings = require("./speakerEmbeddings");
-        const noteIds = this.databaseManager.getNotesWithUnmappedSpeakers();
-
-        const profileEmb = new Float32Array(
-          profile.embedding.buffer,
-          profile.embedding.byteOffset,
-          profile.embedding.byteLength / 4
-        );
-
-        for (const noteId of noteIds) {
-          const embeddings = this.databaseManager.getNoteSpeakerEmbeddings(noteId);
-          const existing = this.databaseManager.getSpeakerMappings(noteId);
-          const mappedSpeakers = new Set(existing.map((m) => m.speaker_id));
-          for (const emb of embeddings) {
-            if (mappedSpeakers.has(emb.speaker_id)) continue;
-
-            const speakerEmb = new Float32Array(
-              emb.embedding.buffer,
-              emb.embedding.byteOffset,
-              emb.embedding.byteLength / 4
-            );
-            const similarity = speakerEmbeddings.cosineSimilarity(profileEmb, speakerEmb);
-
-            if (similarity > 0.6) {
-              this.databaseManager.setSpeakerMapping(
-                noteId,
-                emb.speaker_id,
-                profile.id,
-                profile.display_name
-              );
-
-              const note = this.databaseManager.getNote(noteId);
-              if (note?.transcript) {
-                try {
-                  const segments = JSON.parse(note.transcript);
-                  let changed = false;
-                  for (const seg of segments) {
-                    if (seg.speaker === emb.speaker_id && !seg.speakerName) {
-                      if (canAutoRelabelSpeaker(seg)) {
-                        applyConfirmedSpeaker(seg, {
-                          speakerName: profile.display_name,
-                          speakerIsPlaceholder: false,
-                        });
-                      } else {
-                        seg.speakerName = profile.display_name;
-                        seg.speakerIsPlaceholder = false;
-                      }
-                      changed = true;
-                    }
-                  }
-                  if (changed) {
-                    this.databaseManager.updateNote(noteId, {
-                      transcript: JSON.stringify(segments),
-                    });
-                  }
-                } catch (_) {}
-              }
-            }
-          }
-        }
-      } catch (err) {
-        debugLogger.warn("Retroactive speaker mapping failed", { error: err.message });
-      }
-    });
-  }
-
-  _tryAutoLabelOneOnOne(noteId) {
-    setImmediate(async () => {
-      try {
-        const note = this.databaseManager.getNote(noteId);
-        const other = this._resolveOneOnOneOtherParticipant(note?.participants);
-        if (!other) return;
-        const { displayName, email } = other;
-
-        const embeddings = this.databaseManager.getNoteSpeakerEmbeddings(noteId);
-        if (!embeddings.length) return;
-
-        const existingMappings = this.databaseManager.getSpeakerMappings(noteId);
-        const mappedSpeakers = new Set(existingMappings.map((m) => m.speaker_id));
-
-        const transcript = note.transcript ? JSON.parse(note.transcript) : [];
-        const systemSpeakers = new Set(
-          transcript.filter((s) => s.source !== "mic" && s.speaker).map((s) => s.speaker)
-        );
-
-        const unmapped = embeddings.filter(
-          (e) => !mappedSpeakers.has(e.speaker_id) && systemSpeakers.has(e.speaker_id)
-        );
-        if (!unmapped.length) return;
-
-        let profile = null;
-        for (const emb of unmapped) {
-          profile = this.databaseManager.upsertSpeakerProfile(
-            displayName,
-            email,
-            emb.embedding,
-            profile?.id ?? null
-          );
-          this.databaseManager.setSpeakerMapping(noteId, emb.speaker_id, profile.id, displayName);
-          liveSpeakerIdentifier.mapSpeaker(emb.speaker_id, profile.id, displayName, noteId);
-        }
-
-        const unmappedSystemSpeakers = new Set(unmapped.map((e) => e.speaker_id));
-        let changed = false;
-        for (const seg of transcript) {
-          if (!unmappedSystemSpeakers.has(seg.speaker)) continue;
-          if (seg.speakerName && !seg.speakerIsPlaceholder) continue;
-          if (canAutoRelabelSpeaker(seg)) {
-            applyConfirmedSpeaker(seg, { speakerName: displayName, speakerIsPlaceholder: false });
-          } else {
-            seg.speakerName = displayName;
-            seg.speakerIsPlaceholder = false;
-          }
-          changed = true;
-        }
-
-        if (changed) {
-          this.databaseManager.updateNote(noteId, { transcript: JSON.stringify(transcript) });
-          const updated = this.databaseManager.getNote(noteId);
-          if (updated) broadcastToWindows("note-updated", updated);
-        }
-
-        if (profile) this._retroactiveMapping(profile);
-
-        debugLogger.info(
-          "Auto-labeled 1-on-1 meeting speakers",
-          { noteId, displayName, speakerCount: unmapped.length },
-          "speaker"
-        );
-      } catch (err) {
-        debugLogger.warn("Auto-label 1-on-1 failed", { noteId, error: err.message }, "speaker");
-      }
     });
   }
 

@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import App from "./App.jsx";
 import AgentDictationPillOverlay from "./components/dictation/AgentDictationPillOverlay.tsx";
 import { PermissionGuideOverlay } from "./components/onboarding/PermissionGuideOverlay";
-import ReauthenticationScreen from "./components/ReauthenticationScreen.tsx";
 import BackgroundModelDownloadTray from "./components/onboarding/BackgroundModelDownloadTray.tsx";
 import { LEGACY_ONBOARDING_STEP_KEY, ONBOARDING_SESSION_KEY } from "./components/onboarding/flow";
 import { useAuth } from "./hooks/useAuth";
@@ -47,10 +46,8 @@ function MainApp() {
     policyStatus === "unmanaged" ||
     policyStatus === "error";
   const isWaitingForPolicyStart = isSignedIn && !policyResolved;
-  const autoSyncReady = authLoaded && policyResolved;
 
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [needsReauth, setNeedsReauth] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [postOnboardingSettingsSection, setPostOnboardingSettingsSection] = useState(undefined);
 
@@ -67,17 +64,7 @@ function MainApp() {
         import("./components/RT0Setup.tsx").catch(() => {});
       }
     }
-
-    // Sync starts only after auth settles, so a new bearer token cannot touch
-    // the previous account's rows while validation is still running. A failed
-    // (guest/offline) resolution also counts as settled: canSync() then no-ops
-    // because no validated auth context exists.
-    if (autoSyncReady) {
-      import("./services/SyncService.js")
-        .then(({ syncService }) => syncService.startAutoSync())
-        .catch(() => {});
-    }
-  }, [autoSyncReady, isControlPanel]);
+  }, [isControlPanel]);
 
   useEffect(() => {
     // The dictation window cannot resolve a session (see mirrorActiveAccountScope),
@@ -90,9 +77,6 @@ function MainApp() {
     if (!authLoaded) return;
 
     const onboardingCompleted = localStorage.getItem("onboardingCompleted") === "true";
-    const authSkipped =
-      localStorage.getItem("authenticationSkipped") === "true" ||
-      localStorage.getItem("skipAuth") === "true";
     const onboardingInProgress = isOnboardingInProgress();
     const isReturningUser =
       !onboardingCompleted && isSignedIn && !isGracePeriodOnly && !onboardingInProgress;
@@ -103,12 +87,8 @@ function MainApp() {
 
     const resolved = localStorage.getItem("onboardingCompleted") === "true";
 
-    if (isControlPanel) {
-      if (!resolved) {
-        setShowOnboarding(true);
-      } else if (!isSignedIn && !authSkipped) {
-        setNeedsReauth(true);
-      }
+    if (isControlPanel && !resolved) {
+      setShowOnboarding(true);
     }
 
     if (isDictationPanel && !resolved) {
@@ -122,25 +102,19 @@ function MainApp() {
 
   useEffect(() => {
     if (!isControlPanel || !authLoaded) return;
-    // Fast path: a user who already finished onboarding can never enter the
-    // compact flow only when their session or guest choice is still valid.
-    // Signed-out account users fall through so reauthentication can select the
-    // compact window without first flashing restored control-panel dimensions.
+    // Fast path: a user who already finished onboarding never enters the
+    // compact flow, so restore the saved window size right away.
     const completed = localStorage.getItem("onboardingCompleted") === "true";
-    const authSkipped =
-      localStorage.getItem("authenticationSkipped") === "true" ||
-      localStorage.getItem("skipAuth") === "true";
-    if (completed && !isOnboardingInProgress() && (isSignedIn || authSkipped)) {
+    if (completed && !isOnboardingInProgress()) {
       void window.electronAPI?.setOnboardingWindowMode?.("restore");
     }
-  }, [authLoaded, isControlPanel, isSignedIn]);
+  }, [authLoaded, isControlPanel]);
 
   const settledControlPanelWindowMode = resolveSettledControlPanelWindowMode({
     isControlPanel,
     isLoading,
     isWaitingForPolicyStart,
     showOnboarding,
-    needsReauth,
   });
 
   useEffect(() => {
@@ -155,8 +129,7 @@ function MainApp() {
     if (isLoading || isWaitingForPolicyStart) return;
 
     const onboardingCompleted = localStorage.getItem("onboardingCompleted") === "true";
-    const normalAppVisible =
-      onboardingCompleted && (!isControlPanel || (!showOnboarding && !needsReauth));
+    const normalAppVisible = onboardingCompleted && (!isControlPanel || !showOnboarding);
     const authSkipped =
       localStorage.getItem("authenticationSkipped") === "true" ||
       localStorage.getItem("skipAuth") === "true";
@@ -181,7 +154,7 @@ function MainApp() {
     return () => {
       cancelled = true;
     };
-  }, [isControlPanel, isLoading, isSignedIn, isWaitingForPolicyStart, needsReauth, showOnboarding]);
+  }, [isControlPanel, isLoading, isSignedIn, isWaitingForPolicyStart, showOnboarding]);
 
   const handleOnboardingComplete = (options) => {
     if (options?.openSettings) {
@@ -203,19 +176,6 @@ function MainApp() {
       <Suspense fallback={<LoadingFallback />}>
         <RT0Setup onComplete={handleOnboardingComplete} />
       </Suspense>
-    );
-  }
-
-  if (isControlPanel && needsReauth) {
-    return (
-      <ReauthenticationScreen
-        onContinueWithoutAccount={() => {
-          localStorage.setItem("authenticationSkipped", "true");
-          localStorage.setItem("skipAuth", "true");
-          setNeedsReauth(false);
-        }}
-        onAuthComplete={() => setNeedsReauth(false)}
-      />
     );
   }
 

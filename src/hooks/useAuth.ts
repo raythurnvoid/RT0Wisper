@@ -29,7 +29,6 @@ import logger from "../utils/logger";
 import { useSettingsStore } from "../stores/settingsStore";
 import { usePolicyStore } from "../stores/policyStore";
 import { useEnterpriseIdentityStore } from "../stores/enterpriseIdentityStore";
-import { useLeaderboardParticipationStore } from "../stores/leaderboardParticipationStore";
 
 const useStaticSession = () => ({
   data: null,
@@ -37,37 +36,6 @@ const useStaticSession = () => ({
   error: null,
   refetch: async () => null,
 });
-
-async function loadAccountDependencies() {
-  const [
-    { syncService },
-    { invalidateSpaceRoster },
-    { resetForAccountChange },
-    { useWorkspaceStore },
-  ] = await Promise.all([
-    import("../services/SyncService.js"),
-    import("../lib/spaceRosterCache"),
-    import("../stores/noteStore"),
-    import("../stores/workspaceStore"),
-  ]);
-
-  const resetRendererCaches = () => {
-    invalidateSpaceRoster();
-    resetForAccountChange();
-    useWorkspaceStore.getState().resetForAccountChange();
-  };
-  return { syncService, resetRendererCaches };
-}
-
-async function refreshManagedEnterpriseIdentity(accountId: string, authGeneration: number) {
-  const { refreshManagedEnterpriseIdentity: refresh, useWorkspaceStore } =
-    await import("../stores/workspaceStore");
-  // A newly authenticated employee has no active workspace cached yet. Load
-  // memberships first so a single SCIM-provisioned Enterprise workspace is
-  // selected and its managed provider config resolves without opening Settings.
-  await useWorkspaceStore.getState().refresh();
-  refresh(accountId, authGeneration);
-}
 
 export function useAuth() {
   const useSession = authClient?.useSession ?? useStaticSession;
@@ -141,7 +109,6 @@ export function useAuth() {
   useEffect(() => {
     if (!sessionResolutionFailed || !resolvedUserId || boundGeneration == null) return;
     void usePolicyStore.getState().fetchPolicy(resolvedUserId, boundGeneration);
-    void refreshManagedEnterpriseIdentity(resolvedUserId, boundGeneration);
   }, [boundGeneration, resolvedUserId, sessionResolutionFailed]);
 
   useEffect(() => {
@@ -161,7 +128,6 @@ export function useAuth() {
 
     let cancelled = false;
     const run = async () => {
-      const { syncService, resetRendererCaches } = await loadAccountDependencies();
       const scopeResult = await window.electronAPI?.setActiveAccountScope?.(
         resolvedUserId,
         boundGeneration
@@ -169,24 +135,8 @@ export function useAuth() {
       if (!scopeResult?.success) {
         throw new Error(scopeResult?.error ?? "Could not establish the local account scope");
       }
-      const purgeCachedTeamContent = async () => {
-        resetRendererCaches();
-        await syncService.purgeTeamSpacesForSignOut();
-        resetRendererCaches();
-      };
-      const verifyCachedTeamContent = async () => {
-        const purged = await syncService.verifyTeamSpacesForAccount(boundGeneration);
-        if (purged > 0) resetRendererCaches();
-      };
-
       if (accountScopeRequiresPurge(resolvedUserId)) {
         markAccountScopePurgeRequired();
-        useSettingsStore.getState().setInsightsSyncEnabled(false);
-        // The departing account's leaderboard answer must not outlive it, and a
-        // read still in flight for it must not land on the next one. The opt-out
-        // this device is still holding for that account is kept: it is queued in
-        // storage against that user id and is delivered whenever it signs back in.
-        useLeaderboardParticipationStore.getState().reset();
       }
       if (accountScopeRequiresReconciliation(resolvedUserId)) {
         // This legacy marker drives every already-running SyncService window;
@@ -195,9 +145,11 @@ export function useAuth() {
         usePolicyStore.getState().suspendPolicy();
       }
 
+      // No synced notes or team spaces are cached locally, so there is nothing
+      // to purge or verify; only the account bookkeeping moves.
       await reconcileAccountScope(resolvedUserId, {
-        purge: purgeCachedTeamContent,
-        verify: verifyCachedTeamContent,
+        purge: async () => {},
+        verify: async () => {},
       });
 
       if (resolvedUserId) {
@@ -209,7 +161,6 @@ export function useAuth() {
           logger.debug("Auth state sync", { isSignedIn: true, userId: resolvedUserId }, "auth");
           useSettingsStore.getState().setIsSignedIn(true);
           void usePolicyStore.getState().fetchPolicy(resolvedUserId, boundGeneration);
-          void refreshManagedEnterpriseIdentity(resolvedUserId, boundGeneration);
         }
       } else {
         invalidateValidatedAuthContext();

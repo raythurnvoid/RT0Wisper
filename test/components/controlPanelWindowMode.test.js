@@ -8,17 +8,7 @@ const settledState = {
   isLoading: false,
   isWaitingForPolicyStart: false,
   showOnboarding: false,
-  needsReauth: false,
 };
-
-test("returning-user authentication selects the compact window", async () => {
-  const { resolveSettledControlPanelWindowMode } = await load();
-
-  assert.equal(
-    resolveSettledControlPanelWindowMode({ ...settledState, needsReauth: true }),
-    "compact"
-  );
-});
 
 test("normal control-panel content restores the saved window", async () => {
   const { resolveSettledControlPanelWindowMode } = await load();

@@ -5,7 +5,6 @@ export interface SettledControlPanelWindowState {
   isLoading: boolean;
   isWaitingForPolicyStart: boolean;
   showOnboarding: boolean;
-  needsReauth: boolean;
 }
 
 export function resolveSettledControlPanelWindowMode(
@@ -20,5 +19,5 @@ export function resolveSettledControlPanelWindowMode(
     return null;
   }
 
-  return state.needsReauth ? "compact" : "restore";
+  return "restore";
 }

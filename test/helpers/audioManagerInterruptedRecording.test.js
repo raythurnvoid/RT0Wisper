@@ -11,7 +11,6 @@ const { installMicCaptureGlobals } = require("../lib/rendererTestHarness");
 const keptAudio = { dataRetentionEnabled: true, audioRetentionDays: 30 };
 
 async function load(t, settings = keptAudio) {
-  const pushes = [];
   const loaded = await loadAudioManager(t, {
     cachePrefix: "openwhispr-interrupted-recording-test-",
     settingsKey: "__interruptedRecordingSettings",
@@ -21,17 +20,12 @@ async function load(t, settings = keptAudio) {
         export const startRecordingSpool = (routeKind) => globalThis.__interruptedSpools.start(routeKind);
         export const takeInterruptedRecordings = () => globalThis.__interruptedSpools.take();
       `,
-      "/services/SyncService.js": `
-        export const syncService = { debouncedPush: (...args) => globalThis.__interruptedPushes.push(args) };
-      `,
     },
   });
-  globalThis.__interruptedPushes = pushes;
   t.after(() => {
     delete globalThis.__interruptedSpools;
-    delete globalThis.__interruptedPushes;
   });
-  return { ...loaded, pushes };
+  return loaded;
 }
 
 function fakeSpool(name) {
@@ -67,7 +61,7 @@ const audio = (bytes = 4096) => new Blob([new Uint8Array(bytes)], { type: "audio
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 test("an interrupted recording comes back as a failed row with its audio, then leaves the spool", async (t) => {
-  const { createManager, window, pushes } = await load(t);
+  const { createManager, window } = await load(t);
   const recording = interrupted([audio()]);
   globalThis.__interruptedSpools = { take: async () => [recording] };
   const saved = [];
@@ -96,7 +90,6 @@ test("an interrupted recording comes back as a failed row with its audio, then l
     },
     { id: 7, bytes: 4096, metadata: { durationMs: 840000, provider: null, model: null } },
   ]);
-  assert.deepEqual(pushes, [["transcription", 7]]);
   assert.equal(recording.discarded, true);
 });
 
