@@ -290,7 +290,6 @@ async function loadCancelGuardManagerClass(t) {
         export const selectResolvedLLMConfig = () => ({ model: null, provider: null });
         export const isCloudCleanupMode = () => true;
         export const isCloudDictationAgentMode = () => false;
-        export const isCloudTranslationMode = () => false;
       `,
       // The real store: capturing recordCleanupFailure is the whole point of
       // the streaming-fallback-leak test below, so the mock just makes its
@@ -320,14 +319,6 @@ async function loadCancelGuardManagerClass(t) {
         export const resolveDictationAgentVisionInference = () => ({
           active: false,
           model: "",
-          config: {},
-        });
-      `,
-      "/dictationTranslationInference": `
-        export const resolveDictationTranslationInference = () => ({
-          reachable: false,
-          model: "",
-          displayProvider: "none",
           config: {},
         });
       `,
@@ -384,7 +375,6 @@ function createStreamingLeakManager(AudioManager) {
     _streamingFallbackSegments: [],
     pendingAssistantConversation: null,
     pendingSelectionEdit: null,
-    translationRequested: false,
     voiceAgentRequested: false,
     micRecovery: { stop() {} },
     finishStreamingFallbackSegment: async () => null,
@@ -488,7 +478,6 @@ test("a cancelled voice-agent command's reasoning failure notifies nothing", asy
   const errors = [];
   const manager = Object.assign(Object.create(AudioManager.prototype), {
     voiceAgentRequested: true,
-    translationRequested: false,
     getAPIKey: async () => "mk-mistral",
     isDictionaryEcho: () => false,
     getWhisperPrompt: () => null,

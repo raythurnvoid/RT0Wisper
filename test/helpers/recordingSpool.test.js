@@ -72,7 +72,6 @@ const deadRow = (seq, segment, at, chunk) => ({
   seq,
   segment,
   mimeType: "audio/webm;codecs=opus",
-  routeKind: "translation",
   startedAt: 1000,
   at,
   chunk: new Blob([chunk]),
@@ -92,7 +91,6 @@ test("a page that died mid-recording hands its audio back once, one blob per rec
   assert.equal(rest.length, 0);
   assert.equal(recording.startedAt, 1000);
   assert.equal(recording.durationMs, 3000);
-  assert.equal(recording.routeKind, "translation");
   assert.deepEqual(await Promise.all(recording.segments.map(text)), [
     "header+speech",
     "after-swap",

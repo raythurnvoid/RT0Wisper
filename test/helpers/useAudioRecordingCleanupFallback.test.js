@@ -12,7 +12,6 @@ const FAKE_AUDIO_MANAGER_SOURCE = `
 export default class FakeAudioManager {
   constructor() {
     this.voiceAgentRequested = false;
-    this.translationRequested = false;
     this.sttConfig = { success: true };
     this.pasteCalls = 0;
     this.shownNotices = [];
@@ -46,7 +45,6 @@ test("a raw cleanup fallback is reported with whether the dictation was pasted",
       electronAPI: {
         onToggleDictation: noopDispose,
         onToggleVoiceAgent: noopDispose,
-        onToggleTranslation: noopDispose,
         onStartDictation: noopDispose,
         onPrepareDictation: noopDispose,
         onCancelDictationPreparation: noopDispose,

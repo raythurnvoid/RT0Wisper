@@ -393,7 +393,8 @@ class DatabaseManager {
       } catch (err) {
         if (!err.message.includes("duplicate column")) throw err;
       }
-      // Records the dictation intent (e.g. "translation") so retry/recover re-runs the same route.
+      // No longer written: it held the removed translation route. Kept so old and new
+      // databases share one schema.
       try {
         this.db.exec("ALTER TABLE transcriptions ADD COLUMN route_kind TEXT");
       } catch (err) {
@@ -1628,7 +1629,6 @@ class DatabaseManager {
       status = "completed",
       errorMessage = null,
       errorCode = null,
-      routeKind = null,
       clientTranscriptionId = randomUUID(),
       analyticsOccurredAt = null,
     } = {}
@@ -1647,9 +1647,9 @@ class DatabaseManager {
       const occurredAt = toDbTimestamp(analyticsOccurredAt);
       const stmt = this.db.prepare(
         `INSERT INTO transcriptions (
-           text, raw_text, status, error_message, error_code, route_kind,
+           text, raw_text, status, error_message, error_code,
            client_transcription_id, timestamp
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`
+         ) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))`
       );
       const result = stmt.run(
         text,
@@ -1657,7 +1657,6 @@ class DatabaseManager {
         status,
         errorMessage,
         errorCode,
-        routeKind,
         clientTranscriptionId,
         occurredAt
       );

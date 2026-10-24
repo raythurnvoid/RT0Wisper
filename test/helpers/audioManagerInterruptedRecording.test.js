@@ -17,7 +17,7 @@ async function load(t, settings = keptAudio) {
     settings,
     mockModules: {
       "/recordingSpool": `
-        export const startRecordingSpool = (routeKind) => globalThis.__interruptedSpools.start(routeKind);
+        export const startRecordingSpool = () => globalThis.__interruptedSpools.start();
         export const takeInterruptedRecordings = () => globalThis.__interruptedSpools.take();
       `,
     },
@@ -49,7 +49,6 @@ function interrupted(segments) {
   const recording = {
     startedAt: Date.parse("2026-09-05T08:00:00.000Z"),
     durationMs: 14 * 60 * 1000,
-    routeKind: "translation",
     segments,
     discarded: false,
     discard: () => (recording.discarded = true),
@@ -84,7 +83,6 @@ test("an interrupted recording comes back as a failed row with its audio, then l
         status: "failed",
         errorMessage: "OpenWhispr closed early.",
         errorCode: "CRASH_RECOVERY",
-        routeKind: "translation",
         analyticsOccurredAt: "2026-09-05T08:00:00.000Z",
       },
     },
@@ -135,19 +133,12 @@ test("a spool that only holds the container header is dropped without a row", as
   assert.equal(recording.discarded, true);
 });
 
-test("recordings are only spooled when their audio would be kept, with their route", async (t) => {
+test("recordings are only spooled when their audio would be kept", async (t) => {
   const { createManager, setSettings } = await load(t);
-  const routes = [];
-  globalThis.__interruptedSpools = {
-    start: (routeKind) => {
-      routes.push(routeKind);
-      return fakeSpool("kept");
-    },
-  };
-  const manager = createManager({ translationRequested: true });
+  globalThis.__interruptedSpools = { start: () => fakeSpool("kept") };
+  const manager = createManager();
 
   assert.equal(manager._startRecordingSpool().name, "kept");
-  assert.deepEqual(routes, ["translation"]);
   setSettings({ dataRetentionEnabled: true, audioRetentionDays: 0 });
   assert.equal(manager._startRecordingSpool(), null);
 });

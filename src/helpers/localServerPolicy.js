@@ -23,9 +23,6 @@ export function resolveLocalServerNeeds({
   noteFormattingModel,
   chatAgentMode,
   chatAgentModel,
-  useDictationTranslation,
-  translationMode,
-  translationModel,
 }) {
   const cleanup = localModelOf(useCleanupModel, cleanupMode, cleanupModel);
   const dictationAgent = localModelOf(useDictationAgent, dictationAgentMode, dictationAgentModel);
@@ -34,7 +31,6 @@ export function resolveLocalServerNeeds({
     dictationAgent,
     localModelOf(true, noteFormattingMode, noteFormattingModel),
     localModelOf(true, chatAgentMode, chatAgentModel),
-    localModelOf(useDictationTranslation, translationMode, translationModel),
   ].filter((model, index, all) => model && all.indexOf(model) === index);
 
   return { cleanup, dictationAgent, models };

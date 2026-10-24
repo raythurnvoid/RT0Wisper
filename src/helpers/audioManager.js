@@ -6,7 +6,7 @@ import {
 import logger from "../utils/logger";
 import { assertValidCleanupOutput } from "../utils/cleanupOutput";
 import { withSessionRefresh } from "../lib/auth";
-import { getBaseLanguageCode, getLanguageLabel } from "../utils/languageSupport";
+import { getBaseLanguageCode } from "../utils/languageSupport";
 import {
   applyChineseScript,
   mergeWhisperPrompt,
@@ -40,7 +40,6 @@ import {
   getEffectiveCleanupModel,
   isCloudCleanupMode,
   isCloudDictationAgentMode,
-  isCloudTranslationMode,
   selectResolvedLLMConfig,
 } from "../stores/settingsStore";
 
@@ -56,12 +55,7 @@ import { resolveMistralModel } from "./transcriptionRoute.ts";
 import { transcriptionFailureOutcome } from "./transcriptionFailureOutcome";
 import { errorFromIpcResult } from "./ipcErrorFields";
 import { PROVIDER_ERROR_CODES, asProviderError, providerError } from "./providerHttpErrors";
-import {
-  executeTranslationChain,
-  hasTextContent,
-  resolveTranslatedText,
-  shouldRunTranslateStep,
-} from "./translationChain";
+import { hasTextContent } from "./textContent";
 import {
   detectAgentName,
   stripAgentAddress,
@@ -78,7 +72,6 @@ import {
   resolveDictationAgentVisionInference,
 } from "./dictationAgentInference";
 import { providerSupportsImages } from "../services/ai/inferenceProviders";
-import { resolveDictationTranslationInference } from "./dictationTranslationInference";
 import { resolvePrompt, appendScreenContextSuffix } from "../config/prompts";
 import { resolveDictationToneStyle } from "../config/toneStyle";
 import { selectionEditToneSentence } from "../config/prompts/toneStyle";
@@ -170,18 +163,11 @@ function dictationAgentReachable(settings) {
     .reachable;
 }
 
-function translationChainReachable(settings) {
-  return resolveDictationTranslationInference(settings, {
-    isCloudTranslation: isCloudTranslationMode(),
-  }).reachable;
-}
-
 function resolveReasoningRoute(
   text,
   settings,
   agentName,
   voiceAgentRequested,
-  translationRequested,
   screenContext,
   detectedLanguage
 ) {
@@ -198,21 +184,12 @@ function resolveReasoningRoute(
     isCloudAgent: isCloudDictationAgentMode(),
   });
 
-  const translation = resolveDictationTranslationInference(settings, {
-    isCloudTranslation: isCloudTranslationMode(),
-  });
-
   const kind = resolveDictationRouteKind({
     cleanupReachable,
     agentReachable: agent.reachable,
-    // A translation recording ignores the wake word, so skip the scan.
     agentInvoked:
-      !translationRequested &&
-      !!agentName &&
-      detectAgentName(text, agentName, wakeWordLanguage, settings.snippets),
+      !!agentName && detectAgentName(text, agentName, wakeWordLanguage, settings.snippets),
     voiceAgentRequested,
-    translationRequested,
-    translationReachable: translation.reachable,
   });
   logger.logReasoning("ROUTE_RESOLVED", {
     kind,
@@ -223,21 +200,9 @@ function resolveReasoningRoute(
     agentModel: agent.model,
     hasScreenContext: !!screenContext,
   });
-  if (translationRequested && kind !== "translation") {
-    logger.warn(
-      "Translation requested but unreachable, falling back",
-      {
-        kind,
-        useDictationTranslation: settings.useDictationTranslation,
-        hasTarget: !!settings.translationTargetLanguage?.trim(),
-      },
-      "transcription"
-    );
-  }
-  // Shared by ordinary cleanup and the translation chain's cleanup step.
   // A truncated reply must fail rather than replace the dictation with its first part:
-  // the cleanup route pastes the raw transcript and the chain translates it, and both
-  // raise the cleanup-failed toast (#2091).
+  // the cleanup route then pastes the raw transcript and raises the cleanup-failed
+  // toast (#2091).
   const cleanupConfig = {
     inferenceScope: /** @type {const} */ ("dictationCleanup"),
     disableThinking: settings.cleanupDisableThinking,
@@ -245,23 +210,6 @@ function resolveReasoningRoute(
     temperature: cleanupTemperature,
     requireCompleteOutput: true,
   };
-  if (kind === "translation") {
-    return {
-      kind: "translation",
-      model: translation.model,
-      cleanupReachable,
-      cleanupConfig,
-      config: {
-        ...translation.config,
-        systemPrompt: resolvePrompt("translate", {
-          agentName,
-          targetLanguageLabel: getLanguageLabel(settings.translationTargetLanguage),
-          customDictionary: getDictionaryHintWords(settings),
-          uiLanguage: settings.uiLanguage,
-        }),
-      },
-    };
-  }
   if (kind === "agent") {
     const vision = resolveDictationAgentVisionInference(settings, {
       isSignedIn: settings.isSignedIn,
@@ -481,8 +429,6 @@ class AudioManager {
     this.streamingFallbackChunks = [];
     this._recordingSpool = null;
     this.voiceAgentRequested = false;
-    this.translationRequested = false;
-    this.translationApplied = false;
     this.pendingSelectionEdit = null;
     this.pendingAssistantConversation = null;
     this.pendingCleanupFailure = null;
@@ -538,7 +484,7 @@ class AudioManager {
   _startRecordingSpool() {
     const { dataRetentionEnabled, audioRetentionDays } = getEffectiveRetentionPreferences();
     if (!dataRetentionEnabled || audioRetentionDays <= 0) return null;
-    return startRecordingSpool(this.translationRequested ? "translation" : null);
+    return startRecordingSpool();
   }
 
   _takeRecordingSpool() {
@@ -597,22 +543,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     return words.length > 0 ? words.join(", ") : null;
   }
 
-  // Script conversion targets whatever the user ends up pasting: the translation
-  // target when translating, otherwise the dictation language. Using the STT
-  // language here would force zh-TW source audio back to Traditional even when
-  // the user asked to translate into Simplified.
-  //
-  // Only a completed translate step actually moves text into the target language.
-  // When translation is unreachable, skipped or fails, the source transcript is
-  // what gets pasted, so it must be scripted as the STT language — otherwise a
-  // failed ja → zh-CN run would run Japanese through OpenCC (会議の資料 → 会议の数据).
-  getEffectiveOutputLanguage(settings) {
-    if (this.translationRequested && this.translationApplied) {
-      return settings.translationTargetLanguage || "auto";
-    }
-    return this.getEffectiveSttLanguage(settings);
-  }
-
   // Whisper only accepts language "zh"; script (简体/繁體) is applied here. See #975.
   // No transcript exists yet, so only an explicit zh-CN/zh-TW may bias the prompt.
   getWhisperPrompt(settings = getSettings(), dictionaryPrompt = this.getCustomDictionaryPrompt()) {
@@ -625,7 +555,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     );
   }
 
-  // Cleanup runs before the translate step, so it still works in the STT language.
   getCleanupLanguage(settings) {
     return resolveCleanupLanguage(this.getEffectiveSttLanguage(settings));
   }
@@ -637,7 +566,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     return applyChineseScript(
       text,
       resolveChineseScriptTarget(
-        this.getEffectiveOutputLanguage(settings),
+        this.getEffectiveSttLanguage(settings),
         settings.chineseScriptPreference,
         text
       )
@@ -677,7 +606,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     onTranscriptionComplete,
     onPartialTranscript,
     onStreamingCommit,
-    onTranslationFallback,
   }) {
     this.onStateChange = onStateChange;
     this.onError = onError;
@@ -685,12 +613,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     this.onTranscriptionComplete = onTranscriptionComplete;
     this.onPartialTranscript = onPartialTranscript;
     this.onStreamingCommit = onStreamingCommit;
-    this.onTranslationFallback = onTranslationFallback;
-  }
-
-  // Fail-open: translation degraded/failed but raw text is still pasted. Surface why.
-  notifyTranslationFallback(reason) {
-    this.onTranslationFallback?.({ reason });
   }
 
   setMicCaptureStatus(status) {
@@ -774,17 +696,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     return context;
   }
 
-  setTranslationRequested(requested) {
-    this.translationRequested = requested;
-    this.translationApplied = false;
-  }
-
-  // In translation mode the STT hint is the configured source language, not
-  // the UI-wide preferred language; "auto" keeps whisper auto-detection.
   getEffectiveSttLanguage(settings) {
-    if (this.translationRequested) {
-      return settings.translationSourceLanguage || "auto";
-    }
     return settings.preferredLanguage;
   }
 
@@ -847,8 +759,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
   }
 
   // Consumed by the cleanup route, and by an agent command for an answer
-  // typed at the caret or a rewrite of the selection. Translation keeps its
-  // source's tone.
+  // typed at the caret or a rewrite of the selection.
   async consumeToneStyle() {
     const pending = this.toneStylePromise;
     this.toneStylePromise = null;
@@ -2235,8 +2146,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     }
 
     const s = getSettings();
-    const useReasoning =
-      !!s.useCleanupModel || dictationAgentReachable(s) || translationChainReachable(s);
+    const useReasoning = !!s.useCleanupModel || dictationAgentReachable(s);
     const now = Date.now();
     const cacheValid =
       this.reasoningAvailabilityCache &&
@@ -2297,94 +2207,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       };
       this.cachedReasoningPreference = useReasoning;
       return false;
-    }
-  }
-
-  // Cleanup-then-translate chain shared by batch, cloud, and streaming paths: Step 1
-  // (optional cleanup) soft-fails to input; Step 2 translates unless source === target.
-  async runTranslationChain({ text, settings, agentName, route, cleanup }) {
-    const runCleanup = async (currentText) => {
-      if (cleanup.mode === "cloudReason") {
-        const customPrompt = this.getCustomPrompt();
-        const reasonResult = await withSessionRefresh(async () => {
-          const res = await window.electronAPI.cloudReason(currentText, {
-            agentName,
-            promptMode: "cleanup",
-            purpose: "cleanup",
-            customDictionary: getDictionaryHintWords(settings),
-            customPrompt,
-            language: this.getCleanupLanguage(settings),
-            locale: settings.uiLanguage || "en",
-            ...(cleanup.meta || {}),
-          });
-          if (!res.success) {
-            const err = new Error(res.error || "Cloud reasoning failed");
-            err.code = res.code;
-            throw err;
-          }
-          return res;
-        });
-        if (!customPrompt && hasTextContent(reasonResult.text)) {
-          assertValidCleanupOutput(currentText, reasonResult.text);
-        }
-        return reasonResult.success && reasonResult.text ? reasonResult.text : null;
-      }
-      const cleanupModel = cleanup.model;
-      if (cleanupModel) {
-        return this.processWithReasoningModel(
-          currentText,
-          cleanupModel,
-          agentName,
-          route.cleanupConfig
-        );
-      }
-      return null;
-    };
-
-    const runTranslate = async (currentText) =>
-      this.processWithReasoningModel(currentText, route.model, agentName, route.config);
-
-    try {
-      const chainResult = await executeTranslationChain({
-        text,
-        cleanupReachable: route.cleanupReachable,
-        cleanupIsCloud: cleanup.mode === "cloudReason",
-        runCleanup,
-        runTranslate,
-        shouldTranslate: shouldRunTranslateStep(
-          settings.translationSourceLanguage,
-          settings.translationTargetLanguage
-        ),
-        translateIsCloud: route.config?.provider === "openwhispr",
-        onCleanupError: (cleanupError) => {
-          const { level = "error", channel, extra } = cleanup.log || {};
-          logger[level](
-            "Cleanup step failed in translation chain, translating raw transcript",
-            { ...(extra || {}), error: cleanupError.message },
-            channel
-          );
-          // The chain translates the raw transcript, so the dropped cleanup has to
-          // surface the same toast the cleanup route raises (#2091).
-          this.pendingCleanupFailure = cleanupFailureFromError(cleanupError);
-        },
-        onEmptyTranslate: () => {
-          const { channel } = cleanup.log || {};
-          logger.warn("Translation step returned empty text, keeping previous text", {}, channel);
-          this.notifyTranslationFallback("failed");
-        },
-        // No fallback toast here: an echoed translation usually means the dictation was
-        // already in the target language, which the current app treats as silent success.
-        onUnchangedTranslate: () => {
-          const { channel } = cleanup.log || {};
-          logger.warn("Translation step returned unchanged text, keeping source text", {}, channel);
-        },
-      });
-      this.translationApplied = chainResult.translated;
-      return chainResult;
-    } catch (translateError) {
-      // Translate step threw: raw text is still pasted by the caller. Surface the failure.
-      this.notifyTranslationFallback("failed");
-      throw translateError;
     }
   }
 
@@ -2461,7 +2283,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     if (
       !cleanupReachable &&
       !agentReachable &&
-      !(this.translationRequested && translationChainReachable(settings)) &&
       // A voice-assistant command always routes: standalone commands stream
       // in the panel, which reports a missing model in-conversation.
       !this.voiceAgentRequested
@@ -2497,37 +2318,10 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           settings,
           agentName,
           this.voiceAgentRequested,
-          this.translationRequested,
           screenContext
         );
-        if (this.translationRequested && route.kind !== "translation") {
-          this.notifyTranslationFallback("unreachable");
-        }
         this._noteCleanupRoute(settings, route);
         if (route.kind === "skip") return normalizedText;
-
-        if (route.kind === "translation") {
-          const { text: translatedText } = await this.runTranslationChain({
-            text: normalizedText,
-            settings,
-            agentName,
-            route,
-            cleanup: {
-              mode: "model",
-              model: cleanupModel,
-              log: { level: "warn", channel: "notes", extra: { source } },
-            },
-          });
-
-          logger.logReasoning("REASONING_SUCCESS", {
-            resultLength: translatedText.length,
-            resultPreview:
-              translatedText.substring(0, 100) + (translatedText.length > 100 ? "..." : ""),
-            processingTime: new Date().toISOString(),
-          });
-
-          return translatedText;
-        }
 
         const targetModel = route.kind === "agent" ? route.model : cleanupModel;
         const reasoningConfig =
@@ -2769,7 +2563,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     try {
       const result = await window.electronAPI.saveTranscription(text, rawText, {
         clientTranscriptionId: eventId,
-        routeKind: this.translationRequested ? "translation" : null,
         analyticsOccurredAt: occurredAt.toISOString(),
       });
 
@@ -2823,7 +2616,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           status: "failed",
           errorMessage,
           errorCode,
-          routeKind: this.translationRequested ? "translation" : null,
           ...(clientTranscriptionId ? { clientTranscriptionId } : {}),
           ...(metadata?.analyticsOccurredAt
             ? { analyticsOccurredAt: metadata.analyticsOccurredAt }
@@ -2872,7 +2664,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     try {
       const result = await window.electronAPI.saveTranscription("", null, {
         status: "discarded",
-        routeKind: this.translationRequested ? "translation" : null,
         ...(analyticsOccurredAt ? { analyticsOccurredAt } : {}),
       });
       if (!result?.id) return;
@@ -2929,7 +2720,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     }
   }
 
-  async _saveInterruptedRecording({ segments, startedAt, durationMs, routeKind }, errorMessage) {
+  async _saveInterruptedRecording({ segments, startedAt, durationMs }, errorMessage) {
     let audio;
     try {
       audio = await this.mergeRecordedSegments(segments);
@@ -2946,7 +2737,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         status: "failed",
         errorMessage,
         errorCode: "CRASH_RECOVERY",
-        routeKind,
         analyticsOccurredAt: new Date(startedAt).toISOString(),
       });
       savedId = result?.id ?? null;
@@ -3912,13 +3702,9 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         stSettings,
         agentName,
         this.voiceAgentRequested,
-        this.translationRequested,
         screenContext,
         streamingSttLanguage
       );
-      if (this.translationRequested && route.kind !== "translation") {
-        this.notifyTranslationFallback("unreachable");
-      }
       this._noteCleanupRoute(stSettings, route);
       const isCloudCleanup = isCloudCleanupMode();
       const toneStyle = route.kind === "cleanup" ? await this.consumeToneStyle() : null;
@@ -3999,36 +3785,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
               "streaming"
             );
           }
-        } else if (route.kind === "translation") {
-          const chainResult = await this.runTranslationChain({
-            text: finalText,
-            settings: stSettings,
-            agentName,
-            route,
-            cleanup: isCloudCleanup
-              ? {
-                  mode: "cloudReason",
-                  meta: {
-                    sttProvider: providerName,
-                    sttModel: streamingSttModel,
-                    sttProcessingMs: streamingSttProcessingMs,
-                    sttWordCount: streamingSttWordCount,
-                    sttLanguage: streamingSttLanguage,
-                    audioDurationMs: durationSeconds
-                      ? Math.round(durationSeconds * 1000)
-                      : undefined,
-                    audioSizeBytes: streamingAudioBytesSent || undefined,
-                    audioFormat: "linear16",
-                  },
-                  log: { level: "error", channel: "streaming" },
-                }
-              : {
-                  mode: "model",
-                  model: getEffectiveCleanupModel(),
-                  log: { level: "error", channel: "streaming" },
-                },
-          });
-          finalText = resolveTranslatedText(finalText, chainResult);
         }
       } catch (reasonError) {
         if (wasCancelled()) return true;
@@ -4200,11 +3956,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
   shouldShowPreviewCleanupState() {
     const settings = getSettings();
-    return (
-      !!settings.useCleanupModel ||
-      !!settings.useDictationAgent ||
-      (this.translationRequested && !!settings.useDictationTranslation)
-    );
+    return !!settings.useCleanupModel || !!settings.useDictationAgent;
   }
 
   async cleanupPreview(options = {}) {

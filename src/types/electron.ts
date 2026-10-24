@@ -38,9 +38,6 @@ export interface LocalServerPrefs {
   noteFormattingModel: string;
   chatAgentMode: InferenceMode;
   chatAgentModel: string;
-  useDictationTranslation: boolean;
-  translationMode: InferenceMode;
-  translationModel: string;
 }
 
 export type SelfHostedType = "openai-compatible" | "lan";
@@ -341,7 +338,7 @@ export interface ScreenRecordingAccessResult {
   needsRelaunch?: boolean;
 }
 
-export type CloudReasonPurpose = "cleanup" | "assistant" | "translation" | "noteFormatting";
+export type CloudReasonPurpose = "cleanup" | "assistant" | "noteFormatting";
 
 // Orukeet's audio language estimate, reported for the backend's per-user gate.
 export interface OrukeetLanguageRoutingTelemetry {
@@ -638,12 +635,11 @@ declare global {
       captureDictationAppCategory?: () => Promise<ToneAppCategory>;
       onToggleDictation: (callback: () => void) => () => void;
       onToggleVoiceAgent?: (callback: () => void) => () => void;
-      onToggleTranslation?: (callback: () => void) => () => void;
       onOpenAssistantPanel?: (callback: () => void) => () => void;
       onStartDictation?: (callback: () => void) => () => void;
       onStopDictation?: (callback: () => void) => () => void;
       onPrepareDictation?: (
-        callback: (options?: { inputKind?: "dictation" | "assistant" | "translation" }) => void
+        callback: (options?: { inputKind?: "dictation" | "assistant" }) => void
       ) => () => void;
       onCancelDictationPreparation?: (callback: () => void) => () => void;
       onCancelDictation?: (callback: () => void) => () => void;
@@ -652,7 +648,7 @@ declare global {
       ) => () => void;
       dictationLifecycleStateChanged: (
         state: "idle" | "preparing" | "recording" | "processing",
-        inputKind?: "dictation" | "assistant" | "translation"
+        inputKind?: "dictation" | "assistant"
       ) => void;
       dictationAudioLevelChanged?: (level: number) => void;
       toggleAgentPanelDictation?: () => Promise<{ success: boolean }>;
@@ -1140,8 +1136,6 @@ declare global {
       saveCleanupCustomKey?: (key: string) => Promise<void>;
       getNoteFormattingCustomKey?: () => Promise<string | null>;
       saveNoteFormattingCustomKey?: (key: string) => Promise<void>;
-      getTranslationCustomKey?: () => Promise<string | null>;
-      saveTranslationCustomKey?: (key: string) => Promise<void>;
       getDictationAgentCustomKey?: () => Promise<string | null>;
       saveDictationAgentCustomKey?: (key: string) => Promise<void>;
       getDictationAgentVisionCustomKey?: () => Promise<string | null>;
@@ -1344,8 +1338,6 @@ declare global {
       // Agent Mode
       updateVoiceAgentHotkey?: (hotkey: string) => Promise<{ success: boolean; message?: string }>;
       getVoiceAgentKey?: () => Promise<string>;
-      updateTranslationHotkey?: (hotkey: string) => Promise<{ success: boolean; message?: string }>;
-      getTranslationKey?: () => Promise<string>;
       createAgentConversation?: (
         title: string,
         noteId?: number | null,

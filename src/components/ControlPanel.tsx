@@ -21,7 +21,7 @@ import ControlPanelTopBar from "./ControlPanelTopBar";
 import { useControlPanelNavItems, type ControlPanelView } from "./controlPanelNav";
 import { getCachedPlatform } from "../utils/platform";
 import { isAccessibilitySkipped } from "../utils/permissions";
-import { hasTextContent } from "../helpers/translationChain";
+import { hasTextContent } from "../helpers/textContent";
 import { applyChineseScript, resolveChineseScriptTarget } from "../utils/chineseScript";
 import { getAgentName } from "../utils/agentName";
 import HistoryView from "./HistoryView";

@@ -21,7 +21,6 @@ const BYOK_KEY_BRIDGES = [
     get: "getNoteFormattingCustomKey",
     save: "saveNoteFormattingCustomKey",
   },
-  { base: "translation-custom", get: "getTranslationCustomKey", save: "saveTranslationCustomKey" },
   {
     base: "dictation-agent-custom",
     get: "getDictationAgentCustomKey",
@@ -91,7 +90,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   captureDictationAppCategory: () => ipcRenderer.invoke("capture-dictation-app-category"),
   onToggleDictation: registerListener("toggle-dictation", (callback) => () => callback()),
   onToggleVoiceAgent: registerListener("toggle-voice-agent", (callback) => () => callback()),
-  onToggleTranslation: registerListener("toggle-translation", (callback) => () => callback()),
   onOpenAssistantPanel: registerListener("open-assistant-panel", (callback) => () => callback()),
   onStartDictation: registerListener("start-dictation", (callback) => () => callback()),
   onStopDictation: registerListener("stop-dictation", (callback) => () => callback()),
@@ -552,8 +550,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Agent mode
   updateVoiceAgentHotkey: (hotkey) => ipcRenderer.invoke("update-voice-agent-hotkey", hotkey),
   getVoiceAgentKey: () => ipcRenderer.invoke("get-voice-agent-key"),
-  updateTranslationHotkey: (hotkey) => ipcRenderer.invoke("update-translation-hotkey", hotkey),
-  getTranslationKey: () => ipcRenderer.invoke("get-translation-key"),
   onPreviewText: registerListener("preview-text", (callback) => (_event, text) => callback(text)),
   onPreviewAppend: registerListener(
     "preview-append",

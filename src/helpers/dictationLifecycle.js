@@ -8,7 +8,6 @@ const DICTATION_LIFECYCLE = Object.freeze({
 const DICTATION_INPUT_KIND = Object.freeze({
   DICTATION: "dictation",
   ASSISTANT: "assistant",
-  TRANSLATION: "translation",
 });
 
 const VALID_STATES = new Set(Object.values(DICTATION_LIFECYCLE));

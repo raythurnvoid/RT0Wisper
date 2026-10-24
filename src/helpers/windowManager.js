@@ -1020,10 +1020,6 @@ class WindowManager {
     this._sendDictationToggle("toggle-voice-agent", "assistant");
   }
 
-  sendToggleTranslation() {
-    this._sendDictationToggle("toggle-translation", "translation");
-  }
-
   // The tray's Ask assistant. Only the renderer can open the panel, and only it
   // knows the policy and recording state the pill menu gates the item on, so it
   // decides: nothing is shown or created here, and an accepted command surfaces

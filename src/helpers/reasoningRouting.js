@@ -24,7 +24,7 @@ const MIRRORED_ROUTING_FIELDS = [
   ["cleanupCustomApiKey", "customApiKey"],
 ];
 
-// Fan a cleanup config out to all five LLM scopes; the four non-cleanup scopes
+// Fan a cleanup config out to all four LLM scopes; the three non-cleanup scopes
 // mirror the routing fields that are set plus the derived mode (each tab selects
 // on its mode). The endpoint and key ride along so a self-hosted or custom
 // endpoint is reachable from every scope, not just the one onboarding wrote.
@@ -40,7 +40,6 @@ export function buildReasoningScopePatches(settings, mode) {
     noteFormatting: { mode, ...routing },
     dictationAgent: { mode, ...routing },
     chatIntelligence: { mode, ...routing },
-    dictationTranslation: { mode, ...routing },
   };
 }
 

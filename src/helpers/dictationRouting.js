@@ -60,29 +60,6 @@ export function resolveAgentImageTarget({
   return { attach: false, useVisionOverride: false };
 }
 
-// Decides which reasoning path ("agent" | "cleanup" | "skip") a finished
-// dictation takes. A recording started via the voice agent hotkey always takes
-// the agent path — no wake word needed — and never falls back to cleanup.
-export function resolveDictationTranslationReachability({
-  useDictationTranslation,
-  translationTargetLanguage,
-  translationMode,
-  translationProvider,
-  translationModel,
-  isCloudTranslation,
-  isSelfHostedTranslation,
-}) {
-  if (!useDictationTranslation) return false;
-  if (!translationTargetLanguage?.trim()) return false;
-  return resolveModeReachability({
-    mode: translationMode,
-    provider: translationProvider,
-    model: translationModel,
-    isCloud: isCloudTranslation,
-    isSelfHosted: isSelfHostedTranslation,
-  });
-}
-
 export function resolveModeProvider({ isCloud, mode, provider }) {
   switch (mode) {
     case "openwhispr":
@@ -125,22 +102,6 @@ export function resolveDictationAgentDisplayProvider({
   return resolveModeDisplayProvider(dictationAgentMode, dictationAgentProvider);
 }
 
-export function resolveTranslationProviderId({
-  isCloudTranslation,
-  translationMode,
-  translationProvider,
-}) {
-  return resolveModeProvider({
-    isCloud: isCloudTranslation,
-    mode: translationMode,
-    provider: translationProvider,
-  });
-}
-
-export function resolveTranslationDisplayProvider({ translationMode, translationProvider }) {
-  return resolveModeDisplayProvider(translationMode, translationProvider);
-}
-
 const ARABIC_SCRIPT_RE = /\p{Script=Arabic}/u;
 
 // Wake-word cues gate on the explicit dictation language, then the language
@@ -162,38 +123,26 @@ export function resolveWakeWordLanguage(
 }
 
 // The renderer-side source of truth for what the main process gates the Agent
-// companion pill on. Assistant wins over translation: a voice-agent request is
-// explicit user intent even if a stale translation flag survived.
-export function resolveLifecycleInputKind({ voiceAgentRequested, translationRequested }) {
-  if (voiceAgentRequested) return "assistant";
-  if (translationRequested) return "translation";
-  return "dictation";
+// companion pill on.
+export function resolveLifecycleInputKind({ voiceAgentRequested }) {
+  return voiceAgentRequested ? "assistant" : "dictation";
 }
 
-// Decides which reasoning path ("translation" | "agent" | "cleanup" | "skip")
-// a finished dictation takes. A recording started via the voice assistant
-// hotkey always takes the agent path — no wake word needed, and it wins over
-// translation, as in resolveLifecycleInputKind. Standalone commands stream into
+// Decides which reasoning path ("agent" | "cleanup" | "skip") a finished
+// dictation takes. A recording started via the voice assistant hotkey always
+// takes the agent path — no wake word needed. Standalone commands stream into
 // the assistant panel (which resolves the Voice Assistant scope itself and
 // reports configuration problems in-conversation), so the dictation
 // agent's reachability only gates selection edits — that check happens at the
-// selection disposition, not here. A translation recording degrades to
-// cleanup instead: the transcript is still a useful dictation without the
-// translation step.
+// selection disposition, not here.
 export function resolveDictationRouteKind({
   cleanupReachable,
   agentReachable,
   agentInvoked,
   voiceAgentRequested,
-  translationRequested,
-  translationReachable,
 }) {
   if (voiceAgentRequested) {
     return "agent";
-  }
-  if (translationRequested) {
-    if (translationReachable) return "translation";
-    return cleanupReachable ? "cleanup" : "skip";
   }
   if (agentReachable && agentInvoked) {
     return "agent";

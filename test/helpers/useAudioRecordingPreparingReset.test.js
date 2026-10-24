@@ -18,7 +18,6 @@ const FAKE_AUDIO_MANAGER_SOURCE = `
 export default class FakeAudioManager {
   constructor() {
     this.voiceAgentRequested = false;
-    this.translationRequested = false;
     this.sttConfig = { success: true };
   }
   getState() {
@@ -29,9 +28,6 @@ export default class FakeAudioManager {
     this.voiceAgentRequested = value;
   }
   setAssistantSelectionContext() {}
-  setTranslationRequested(value) {
-    this.translationRequested = value;
-  }
   shouldUseStreaming() {
     return false;
   }
@@ -67,7 +63,6 @@ test("a failed dictation start reports the lifecycle back to idle instead of sti
         // startRecording() directly rather than through any of these events.
         onToggleDictation: noopDispose,
         onToggleVoiceAgent: noopDispose,
-        onToggleTranslation: noopDispose,
         onStartDictation: noopDispose,
         onPrepareDictation: noopDispose,
         onCancelDictationPreparation: noopDispose,

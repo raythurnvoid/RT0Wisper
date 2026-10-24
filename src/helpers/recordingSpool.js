@@ -55,7 +55,7 @@ function discardSession(sessionId) {
   write((store) => store.delete(IDBKeyRange.bound([sessionId, 0], [sessionId, Infinity])));
 }
 
-export function startRecordingSpool(routeKind = null) {
+export function startRecordingSpool() {
   const sessionId = crypto.randomUUID();
   const startedAt = Date.now();
   let seq = 0;
@@ -75,7 +75,6 @@ export function startRecordingSpool(routeKind = null) {
           seq: seq++,
           segment,
           mimeType,
-          routeKind,
           startedAt,
           at: Date.now(),
           chunk,
@@ -111,7 +110,6 @@ export async function takeInterruptedRecordings() {
     if (!session) {
       session = {
         startedAt: row.startedAt,
-        routeKind: row.routeKind,
         lastAt: row.at,
         segments: [],
       };
@@ -126,7 +124,6 @@ export async function takeInterruptedRecordings() {
   return [...sessions].map(([sessionId, session]) => ({
     startedAt: session.startedAt,
     durationMs: session.lastAt - session.startedAt,
-    routeKind: session.routeKind,
     segments: session.segments
       .filter(Boolean)
       .map(({ mimeType, chunks }) => new Blob(chunks, { type: mimeType })),

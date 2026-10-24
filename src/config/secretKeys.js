@@ -90,13 +90,6 @@ const BYOK_API_KEYS = [
     storeKey: "noteFormattingCustomApiKey",
   },
   {
-    base: "translation-custom",
-    env: "TRANSLATION_CUSTOM_API_KEY",
-    get: "getTranslationCustomKey",
-    save: "saveTranslationCustomKey",
-    storeKey: "translationCustomApiKey",
-  },
-  {
     base: "dictation-agent-custom",
     env: "DICTATION_AGENT_CUSTOM_API_KEY",
     get: "getDictationAgentCustomKey",

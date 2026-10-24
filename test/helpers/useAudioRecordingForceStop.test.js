@@ -12,7 +12,6 @@ const FAKE_AUDIO_MANAGER_SOURCE = `
 export default class FakeAudioManager {
   constructor() {
     this.voiceAgentRequested = false;
-    this.translationRequested = false;
     this.sttConfig = {};
     globalThis.__forceStopAudioManager = this;
   }
@@ -24,7 +23,6 @@ export default class FakeAudioManager {
   }
   setVoiceAgentRequested() {}
   setAssistantSelectionContext() {}
-  setTranslationRequested() {}
   startRecording() {
     globalThis.__forceStopStarts += 1;
     return Promise.resolve(true);
@@ -111,7 +109,6 @@ async function mountHarness(
       electronAPI: {
         onToggleDictation: noopDispose,
         onToggleVoiceAgent: noopDispose,
-        onToggleTranslation: noopDispose,
         onStartDictation: noopDispose,
         onPrepareDictation: noopDispose,
         onCancelDictationPreparation: noopDispose,

@@ -73,10 +73,7 @@ export const useAudioRecording = (toast, options = {}) => {
   const demoKindRef = useRef("dictation");
   const onDemoEventRef = useRef(options.onDemoEvent);
   const reportedLifecycleRef = useRef(null);
-  const lastStartOptionsRef = useRef({
-    voiceAgentRequested: false,
-    translationRequested: false,
-  });
+  const lastStartOptionsRef = useRef({ voiceAgentRequested: false });
   const {
     onToggle,
     onAssistantCommand,
@@ -128,7 +125,6 @@ export const useAudioRecording = (toast, options = {}) => {
       inputKindOverride ??
       resolveLifecycleInputKind({
         voiceAgentRequested: audioManagerRef.current?.voiceAgentRequested,
-        translationRequested: audioManagerRef.current?.translationRequested,
       });
     const signature = `${state}:${inputKind}`;
     if (reportedLifecycleRef.current === signature) return;
@@ -137,9 +133,9 @@ export const useAudioRecording = (toast, options = {}) => {
   }, []);
 
   const performStartRecording = useCallback(
-    async ({ voiceAgentRequested = false, translationRequested = false } = {}) => {
+    async ({ voiceAgentRequested = false } = {}) => {
       if (startLockRef.current) return false;
-      lastStartOptionsRef.current = { voiceAgentRequested, translationRequested };
+      lastStartOptionsRef.current = { voiceAgentRequested };
       startLockRef.current = true;
       stopRequestedDuringStartRef.current = false;
       pushForceStoppedRef.current = false;
@@ -189,7 +185,6 @@ export const useAudioRecording = (toast, options = {}) => {
         demoKindRef.current = getOnboardingDemoKind(voiceAgentRequested);
         audioManagerRef.current.setVoiceAgentRequested(voiceAgentRequested);
         audioManagerRef.current.setAssistantSelectionContext(assistantSelectionContext);
-        audioManagerRef.current.setTranslationRequested(translationRequested);
         // Covers the toggle path with freshly-set flags; the signature dedup
         // makes this a no-op when the prepare handler already reported the
         // same kind ahead of the flags being set.
@@ -221,7 +216,7 @@ export const useAudioRecording = (toast, options = {}) => {
 
         // Tone & Style names the app being dictated into while the user speaks,
         // for cleanup and for an assistant answer typed or edited in place there.
-        if (getSettings().toneStyleEnabled && !translationRequested) {
+        if (getSettings().toneStyleEnabled) {
           audioManagerRef.current.beginToneStyleCapture();
         }
 
@@ -958,20 +953,6 @@ export const useAudioRecording = (toast, options = {}) => {
           await persistencePromise;
         }
       },
-      onTranslationFallback: ({ reason }) => {
-        // Fail-open: the raw text was still pasted; the toast removes the silence.
-        toast({
-          title:
-            reason === "unreachable"
-              ? t("hooks.audioRecording.translationFallback.unreachableTitle")
-              : t("hooks.audioRecording.translationFallback.failedTitle"),
-          description:
-            reason === "unreachable"
-              ? t("hooks.audioRecording.translationFallback.unreachableDescription")
-              : t("hooks.audioRecording.translationFallback.failedDescription"),
-          variant: "destructive",
-        });
-      },
     });
 
     // Keep overlay content protection in sync with the screen-context setting
@@ -983,10 +964,7 @@ export const useAudioRecording = (toast, options = {}) => {
       window.electronAPI.setScreenContextEnabled?.(getSettings().voiceAgentScreenContext);
     });
 
-    const handleToggle = async ({
-      voiceAgentRequested = false,
-      translationRequested = false,
-    } = {}) => {
+    const handleToggle = async ({ voiceAgentRequested = false } = {}) => {
       if (!audioManagerRef.current) return;
       const currentState = audioManagerRef.current.getState();
 
@@ -995,7 +973,7 @@ export const useAudioRecording = (toast, options = {}) => {
       if (startLockRef.current || currentState.isRecording) {
         await performStopRecording();
       } else if (canStartDictation(currentState)) {
-        await performStartRecording({ voiceAgentRequested, translationRequested });
+        await performStartRecording({ voiceAgentRequested });
       }
     };
 
@@ -1014,11 +992,6 @@ export const useAudioRecording = (toast, options = {}) => {
 
     const disposeVoiceAgentToggle = window.electronAPI.onToggleVoiceAgent?.(() => {
       handleToggle({ voiceAgentRequested: true });
-      onToggle?.();
-    });
-
-    const disposeTranslationToggle = window.electronAPI.onToggleTranslation?.(() => {
-      handleToggle({ translationRequested: true });
       onToggle?.();
     });
 
@@ -1068,7 +1041,6 @@ export const useAudioRecording = (toast, options = {}) => {
       unsubscribePolicy();
       disposeToggle?.();
       disposeVoiceAgentToggle?.();
-      disposeTranslationToggle?.();
       disposeStart?.();
       disposePrepare?.();
       disposeCancelPreparation?.();
@@ -1152,12 +1124,9 @@ export const useAudioRecording = (toast, options = {}) => {
     return () => clearInterval(interval);
   }, [assistantOpenRef, getAudioLevel, isAssistantVoice, isRecording]);
 
-  const toggleListening = async ({
-    voiceAgentRequested = false,
-    translationRequested = false,
-  } = {}) => {
+  const toggleListening = async ({ voiceAgentRequested = false } = {}) => {
     if (!isRecording && !isProcessing && !isPasting) {
-      await performStartRecording({ voiceAgentRequested, translationRequested });
+      await performStartRecording({ voiceAgentRequested });
     } else if (isRecording) {
       await performStopRecording();
     }

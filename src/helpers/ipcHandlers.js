@@ -3753,39 +3753,6 @@ class IPCHandlers {
       return this.environmentManager.getVoiceAgentKey?.() || "";
     });
 
-    ipcMain.handle("update-translation-hotkey", async (_event, hotkey) => {
-      const hotkeyManager = this.windowManager.hotkeyManager;
-      const translationCallback = this.windowManager._translationHotkeyCallback;
-      if (!translationCallback) {
-        return { success: false };
-      }
-
-      if (!hotkey) {
-        const removed = await hotkeyManager.unregisterSlot("translation");
-        if (removed === false) return { success: false };
-        this.environmentManager.saveTranslationKey?.("");
-        this.windowManager.reconcileNativeKeyListeners();
-        this._notifyHotkeyChanged("");
-        return { success: true, message: "Translation hotkey cleared" };
-      }
-
-      const result = await hotkeyManager.registerSlot("translation", hotkey, translationCallback, {
-        atomic: true,
-      });
-      this.windowManager.reconcileNativeKeyListeners();
-      if (result.success) {
-        this.environmentManager.saveTranslationKey?.(hotkey);
-        this._notifyHotkeyChanged(hotkey);
-        return { success: true, message: `Translation hotkey updated to: ${hotkey}` };
-      }
-
-      return { success: false, message: result.error };
-    });
-
-    ipcMain.handle("get-translation-key", async () => {
-      return this.environmentManager.getTranslationKey?.() || "";
-    });
-
     ipcMain.handle("meeting-set-speaker-diarization-enabled", async (_event, payload) => {
       try {
         this.speakerDiarizationEnabled = payload?.enabled !== false;

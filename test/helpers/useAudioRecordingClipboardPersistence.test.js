@@ -12,7 +12,6 @@ const FAKE_AUDIO_MANAGER_SOURCE = `
 export default class FakeAudioManager {
   constructor() {
     this.voiceAgentRequested = false;
-    this.translationRequested = false;
     globalThis.__clipboardPersistenceAudioManager = this;
   }
   getState() {
@@ -108,7 +107,6 @@ async function mountCompletionHarness(
       electronAPI: {
         onToggleDictation: noopDispose,
         onToggleVoiceAgent: noopDispose,
-        onToggleTranslation: noopDispose,
         onStartDictation: noopDispose,
         onPrepareDictation: noopDispose,
         onCancelDictationPreparation: noopDispose,

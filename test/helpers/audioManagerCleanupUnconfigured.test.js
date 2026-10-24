@@ -29,13 +29,11 @@ async function loadRealAudioManager(t) {
     cleanupProvider: "openai",
     cleanupModel: "",
     useDictationAgent: false,
-    useDictationTranslation: false,
     customPrompts: { cleanup: "" },
     preferredLanguage: "en",
   });
   const manager = Object.assign(Object.create(AudioManager.prototype), {
     voiceAgentRequested: false,
-    translationRequested: false,
     pendingCleanupFailure: null,
     _shownCleanupSetupKey: null,
     getEffectiveSttLanguage: () => "en",

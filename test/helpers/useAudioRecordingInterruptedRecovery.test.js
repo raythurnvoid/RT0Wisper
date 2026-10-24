@@ -37,7 +37,6 @@ test("the mount effect recovers interrupted recordings with the translated messa
       electronAPI: {
         onToggleDictation: noopDispose,
         onToggleVoiceAgent: noopDispose,
-        onToggleTranslation: noopDispose,
         onStartDictation: noopDispose,
         onPrepareDictation: noopDispose,
         onCancelDictationPreparation: noopDispose,
@@ -67,5 +66,7 @@ test("the mount effect recovers interrupted recordings with the translated messa
     root.render(React.createElement(Harness));
   });
 
-  assert.deepEqual(recoveries, ["Recovered after RT0Wisper closed before this dictation finished."]);
+  assert.deepEqual(recoveries, [
+    "Recovered after RT0Wisper closed before this dictation finished.",
+  ]);
 });

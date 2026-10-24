@@ -26,7 +26,6 @@ test("a failed take is dated when it was recorded, not when the failure was writ
   const manager = Object.assign(Object.create(AudioManager.prototype), {
     lastAudioBlob: null,
     lastAudioMetadata: null,
-    translationRequested: false,
   });
   await manager.saveFailedTranscription("boom", null, {
     analyticsOccurredAt: "2026-04-01T09:00:00.000Z",

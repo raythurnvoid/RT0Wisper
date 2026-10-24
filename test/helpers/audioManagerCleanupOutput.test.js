@@ -38,7 +38,6 @@ test("invalid completed cleanup keeps raw text across dictation routes", async (
   const createManager = () =>
     Object.assign(Object.create(AudioManager.prototype), {
       voiceAgentRequested: false,
-      translationRequested: false,
       pendingCleanupFailure: null,
       getEffectiveSttLanguage: () => "en",
       getAPIKey: async () => "mk-mistral",
@@ -48,7 +47,7 @@ test("invalid completed cleanup keeps raw text across dictation routes", async (
       finalizeChineseScript: async (text) => text,
     });
 
-  for (const route of ["batch", "streaming", "translation"]) {
+  for (const route of ["batch", "streaming"]) {
     await t.test(
       `${route} Cloud cleanup snapshots its custom prompt and rejects duplicated output`,
       async () => {
@@ -69,7 +68,7 @@ test("invalid completed cleanup keeps raw text across dictation routes", async (
             result = await manager.processWithOpenAIAPI(new Blob(["synthetic audio"]));
             result = { ...result, ...manager._takePendingResultExtras() };
             assert.equal(result.rawText, RAW);
-          } else if (route === "streaming") {
+          } else {
             Object.assign(manager, {
               streamingFinalText: RAW,
               streamingCleanupFns: [],
@@ -90,27 +89,8 @@ test("invalid completed cleanup keeps raw text across dictation routes", async (
             await manager._finalizeStreamingRecording(null);
             await new Promise(setImmediate);
             assert.equal(result.rawText, RAW);
-          } else {
-            let translationInput;
-            manager.processWithReasoningModel = async (text) => {
-              translationInput = text;
-              return "Traduction du texte original.";
-            };
-            result = await manager.runTranslationChain({
-              text: RAW,
-              settings: { translationSourceLanguage: "en", translationTargetLanguage: "fr" },
-              route: {
-                cleanupReachable: true,
-                model: "translate-model",
-                config: { systemPrompt: "Translate" },
-              },
-              cleanup: { mode: "cloudReason" },
-            });
-            assert.equal(translationInput, customPrompt ? DUPLICATE : RAW);
-            assert.equal(result.text, "Traduction du texte original.");
-            result = { ...result, ...manager._takePendingResultExtras() };
           }
-          if (route !== "translation") assert.equal(result.text, customPrompt ? DUPLICATE : RAW);
+          assert.equal(result.text, customPrompt ? DUPLICATE : RAW);
           assert.equal(result.cleanupFailure?.messageKey, customPrompt ? undefined : MESSAGE_KEY);
         }
       }

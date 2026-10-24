@@ -50,7 +50,6 @@ const DEADLINE_CLASS_BY_SCOPE = {
   dictationCleanup: "interactive", // user is waiting to paste
   dictationAgent: "interactive",
   dictationAgentVision: "interactive",
-  dictationTranslation: "interactive",
   chatIntelligence: "interactive", // typed chat; streaming carries its own idle deadline
   noteFormatting: "background", // whole transcript, runs off-screen with a cancel button
 };

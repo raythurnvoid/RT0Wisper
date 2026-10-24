@@ -46,7 +46,6 @@ test("dictation cleanup carries the tone for the app it was captured in", async 
   const createManager = () =>
     Object.assign(Object.create(AudioManager.prototype), {
       voiceAgentRequested: false,
-      translationRequested: false,
       pendingCleanupFailure: null,
       getEffectiveSttLanguage: () => "en",
       getAPIKey: async () => "mk-mistral",

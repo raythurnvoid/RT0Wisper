@@ -108,20 +108,6 @@ export const INFERENCE_SCOPES = {
       reasoningEffort: "chatAgentReasoningEffort",
     },
   },
-  dictationTranslation: {
-    cloudPurpose: "translation",
-    storeKeys: {
-      mode: "translationMode",
-      provider: "translationProvider",
-      model: "translationModel",
-      cloudMode: "translationCloudMode",
-      cloudBaseUrl: "translationCloudBaseUrl",
-      remoteUrl: "translationRemoteUrl",
-      customApiKey: "translationCustomApiKey",
-      disableThinking: "translationDisableThinking",
-      reasoningEffort: "translationReasoningEffort",
-    },
-  },
 } as const satisfies Record<string, InferenceScopeDefinition>;
 
 export type InferenceScope = keyof typeof INFERENCE_SCOPES;

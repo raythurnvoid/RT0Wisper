@@ -18,7 +18,6 @@ async function loadAudioManager(t, { cachePrefix, settingsKey, reasoningKey }) {
         export const getEffectiveCleanupModel = () => null;
         export const isCloudCleanupMode = () => false;
         export const isCloudDictationAgentMode = () => false;
-        export const isCloudTranslationMode = () => false;
       `,
       "/services/ReasoningService": `
         export default { processText: (...args) => globalThis.${reasoningKey}(...args) };
@@ -157,6 +156,5 @@ test("a non-voice-agent recording clears a stale screen capture", async (t) => {
   });
 
   // Guards the dead-code removal in getEffectiveSttLanguage.
-  manager.translationRequested = false;
   assert.equal(manager.getEffectiveSttLanguage({ preferredLanguage: "en" }), "en");
 });

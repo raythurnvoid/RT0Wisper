@@ -85,18 +85,10 @@ test("OpenWhispr reasoning labels only dictation-agent requests for server enfor
     config: { inferenceScope: "dictationCleanup" },
     ctx: context,
   });
-  await openwhisprProvider.call({
-    text: "bonjour",
-    model: "",
-    agentName: "Whisper",
-    config: { systemPrompt: "Translate to English.", inferenceScope: "dictationTranslation" },
-    ctx: context,
-  });
 
   assert.equal(requests[0].requestPurpose, "agent");
   assert.equal(requests[0].purpose, "assistant");
   assert.equal(requests[1].requestPurpose, undefined);
   assert.equal(requests[1].promptMode, "cleanup");
   assert.equal(requests[1].purpose, "cleanup");
-  assert.equal(requests[2].purpose, "translation");
 });

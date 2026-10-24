@@ -56,13 +56,9 @@ test("Prompt Studio labels dictation-agent runs for policy enforcement", async (
           if (source.endsWith("/utils/logger")) return "\0prompt-studio-logger";
           if (source.endsWith("/config/prompts")) return "\0prompt-studio-prompts";
           if (source.endsWith("/stores/settingsStore")) return "\0prompt-studio-settings";
-          if (source.endsWith("/utils/languageSupport")) return "\0prompt-studio-language";
           if (source.endsWith("/utils/snippets")) return "\0prompt-studio-snippets";
           if (source.endsWith("/helpers/dictationAgentInference")) {
             return "\0prompt-studio-agent-inference";
-          }
-          if (source.endsWith("/helpers/dictationTranslationInference")) {
-            return "\0prompt-studio-translation-inference";
           }
           return null;
         },
@@ -160,16 +156,7 @@ test("Prompt Studio labels dictation-agent runs for policy enforcement", async (
                 dictationAgentMode: "openwhispr",
                 dictationAgentProvider: "openwhispr",
                 dictationAgentModel: "auto",
-                useDictationTranslation: true,
-                translationMode: "openwhispr",
-                translationProvider: "openwhispr",
-                translationModel: "auto",
-                translationRemoteUrl: "",
-                translationCloudBaseUrl: "",
-                translationCustomApiKey: "",
-                translationDisableThinking: false,
-                translationTargetLanguage: "es",
-                customPrompts: { cleanup: "", dictationAgent: "", translate: "" },
+                customPrompts: { cleanup: "", dictationAgent: "" },
                 preferredLanguage: "en",
                 cleanupDisableThinking: false,
                 setCustomPrompt() {},
@@ -179,11 +166,7 @@ test("Prompt Studio labels dictation-agent runs for policy enforcement", async (
               export function selectPolicyEffectiveSettings(settings) { return settings; }
               export const selectIsCloudCleanupMode = () => true;
               export const selectIsCloudDictationAgentMode = () => true;
-              export const selectIsCloudTranslationMode = () => true;
             `;
-          }
-          if (id === "\0prompt-studio-language") {
-            return `export function getLanguageLabel(value) { return value; }`;
           }
           if (id === "\0prompt-studio-snippets") {
             return `export function getDictionaryHintWords() { return []; }`;
@@ -191,18 +174,6 @@ test("Prompt Studio labels dictation-agent runs for policy enforcement", async (
           if (id === "\0prompt-studio-agent-inference") {
             return `
               export function resolveDictationAgentInference() {
-                return {
-                  reachable: true,
-                  model: "auto",
-                  displayProvider: "openwhispr",
-                  config: { provider: "openwhispr" },
-                };
-              }
-            `;
-          }
-          if (id === "\0prompt-studio-translation-inference") {
-            return `
-              export function resolveDictationTranslationInference() {
                 return {
                   reachable: true,
                   model: "auto",

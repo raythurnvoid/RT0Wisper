@@ -43,15 +43,9 @@ export async function lookupHelp(
       settings.meetingTranscriptionMode,
       settings.uploadTranscriptionMode,
     ].every((mode) => mode === "local") &&
-    (
-      [
-        "dictationCleanup",
-        "dictationAgent",
-        "noteFormatting",
-        "chatIntelligence",
-        "dictationTranslation",
-      ] as const
-    ).every((scope) => selectResolvedLLMConfig(settings, scope).mode === "local");
+    (["dictationCleanup", "dictationAgent", "noteFormatting", "chatIntelligence"] as const).every(
+      (scope) => selectResolvedLLMConfig(settings, scope).mode === "local"
+    );
   if (!settings.isSignedIn || fullyLocal) return bundledHelp(topic, "privacy") as HelpResult;
   // Main owns authoritative account-bound policy and can reuse a cached verdict
   // while the renderer policy is refreshing or unavailable.

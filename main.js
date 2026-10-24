@@ -939,32 +939,6 @@ async function startApp() {
     hotkeyManager.notifyRestoreFailures(savedVoiceAgentKey, result);
   }
 
-  // Set up translation hotkey (dictation cleaned up and translated into the
-  // configured target language before pasting)
-  const isTranslationPress = createHotkeyRepeatGate();
-  const translationHotkeyCallback = () => {
-    if (!isTranslationPress()) return;
-    windowManager.sendToggleTranslation();
-  };
-  windowManager._translationHotkeyCallback = translationHotkeyCallback;
-
-  const savedTranslationKey = environmentManager.getTranslationKey?.() || "";
-  if (savedTranslationKey) {
-    const result = await hotkeyManager.registerSlot(
-      "translation",
-      savedTranslationKey,
-      translationHotkeyCallback
-    );
-    if (!result.success) {
-      debugLogger.warn(
-        "Failed to restore translation hotkey",
-        { hotkey: savedTranslationKey },
-        "hotkey"
-      );
-    }
-    hotkeyManager.notifyRestoreFailures(savedTranslationKey, result);
-  }
-
   // Phase 2: Initialize remaining managers after windows are visible
   initializeDeferredManagers();
   if (process.platform === "darwin") {
@@ -1070,16 +1044,10 @@ async function startApp() {
       const voiceAgentUsesGlobe = hotkeyManager
         .getSlotHotkeys("voiceAgent")
         .some(isGlobeLikeHotkey);
-      const translationUsesGlobe = hotkeyManager
-        .getSlotHotkeys("translation")
-        .some(isGlobeLikeHotkey);
       if (voiceAgentUsesGlobe) {
         windowManager.sendToggleVoiceAgent();
       }
-      if (translationUsesGlobe) {
-        windowManager.sendToggleTranslation();
-      }
-      if (!voiceAgentUsesGlobe && !translationUsesGlobe && !dictationUsesGlobe) {
+      if (!voiceAgentUsesGlobe && !dictationUsesGlobe) {
         debugLogger?.debug("[Globe] Ignored — hotkey is not GLOBE", { currentHotkey });
       }
     });
@@ -1157,9 +1125,6 @@ async function startApp() {
       if (hotkeyManager.slotHasHotkey("voiceAgent", modifier)) {
         windowManager.sendToggleVoiceAgent();
       }
-      if (hotkeyManager.slotHasHotkey("translation", modifier)) {
-        windowManager.sendToggleTranslation();
-      }
 
       if (!hotkeyManager.slotHasHotkey("dictation", modifier)) return;
       if (!isLiveWindow(windowManager.mainWindow)) return;
@@ -1225,7 +1190,7 @@ async function startApp() {
       }
     });
 
-    const MAC_NATIVE_HOTKEY_SLOTS = ["dictation", "voiceAgent", "translation"];
+    const MAC_NATIVE_HOTKEY_SLOTS = ["dictation", "voiceAgent"];
     const syncMacNativeHotkeyConfiguration = () => {
       globeKeyManager.setConfiguration(
         hotkeyManager.getMacNativeListenerConfig(MAC_NATIVE_HOTKEY_SLOTS)
@@ -1244,9 +1209,6 @@ async function startApp() {
 
       if (hotkeyManager.slotHasHotkey("voiceAgent", button)) {
         windowManager.sendToggleVoiceAgent();
-      }
-      if (hotkeyManager.slotHasHotkey("translation", button)) {
-        windowManager.sendToggleTranslation();
       }
 
       if (!hotkeyManager.slotHasHotkey("dictation", button)) return;
@@ -1385,8 +1347,6 @@ async function startApp() {
       }
       if (hotkeyManager.slotHasHotkey("voiceAgent", key)) {
         windowManager.sendToggleVoiceAgent();
-      } else if (hotkeyManager.slotHasHotkey("translation", key)) {
-        windowManager.sendToggleTranslation();
       }
     };
 

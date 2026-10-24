@@ -122,8 +122,6 @@ function sync({ loaded, signedIn = false, policySettled = true, ...scopes }) {
       dictationAgentMode: "openwhispr",
       noteFormattingMode: "openwhispr",
       chatAgentMode: "openwhispr",
-      useDictationTranslation: false,
-      translationMode: "openwhispr",
       policySettled,
       ...scopes,
     }

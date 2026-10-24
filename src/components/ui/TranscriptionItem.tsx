@@ -115,11 +115,7 @@ export default function TranscriptionItem({
   const isLimitError = errorCode === "LIMIT_REACHED";
   const isOfflineError = errorCode === "OFFLINE";
 
-  const retryLabel = t(
-    item.route_kind === "translation"
-      ? "controlPanel.history.retryTranslationMode"
-      : "controlPanel.history.retryTranscription"
-  );
+  const retryLabel = t("controlPanel.history.retryTranscription");
 
   // Copy stays visible as the one-tap action; everything else lives in the menu.
   const candidateActions: (MenuAction | false)[] = [
@@ -163,9 +159,7 @@ export default function TranscriptionItem({
           ? "bg-destructive/5"
           : isDiscarded
             ? "bg-muted/20 opacity-80"
-            : "hover:bg-muted/20 dark:hover:bg-white/2",
-        // Translation rows get a 2px primary accent; ps-[14px] keeps text aligned with the other rows.
-        item.route_kind === "translation" && "border-s-2 border-s-primary/70 ps-[14px]"
+            : "hover:bg-muted/20 dark:hover:bg-white/2"
       )}
     >
       <div className="flex items-center justify-between gap-3">

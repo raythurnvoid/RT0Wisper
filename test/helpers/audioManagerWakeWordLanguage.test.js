@@ -34,7 +34,6 @@ async function loadAudioManager(t) {
         export const getEffectiveCleanupModel = () => "cleanup-model";
         export const isCloudCleanupMode = () => false;
         export const isCloudDictationAgentMode = () => false;
-        export const isCloudTranslationMode = () => false;
         export const selectResolvedLLMConfig = () => ({ model: "cleanup-model" });
       `,
       "/dictationAgentInference": `
@@ -47,14 +46,6 @@ async function loadAudioManager(t) {
         export const resolveDictationAgentVisionInference = () => ({
           active: false,
           model: "",
-          config: {},
-        });
-      `,
-      "/dictationTranslationInference": `
-        export const resolveDictationTranslationInference = () => ({
-          reachable: false,
-          model: "",
-          displayProvider: "none",
           config: {},
         });
       `,
@@ -78,7 +69,6 @@ async function loadAudioManager(t) {
     createManager: () =>
       Object.assign(Object.create(AudioManager.prototype), {
         voiceAgentRequested: false,
-        translationRequested: false,
         getAPIKey: async () => "mk-mistral",
         isReasoningAvailable: async () => true,
         isDictionaryEcho: () => false,
@@ -91,7 +81,6 @@ async function loadAudioManager(t) {
     createBankingManager: () =>
       Object.assign(Object.create(AudioManager.prototype), {
         voiceAgentRequested: false,
-        translationRequested: false,
         isProcessing: true,
         getAPIKey: async () => "mk-mistral",
         isReasoningAvailable: async () => true,
@@ -110,7 +99,6 @@ async function loadAudioManager(t) {
     createStreamingManager: (onTranscriptionComplete, transcript = "يا Max، لخّص هذه الملاحظة") =>
       Object.assign(Object.create(AudioManager.prototype), {
         voiceAgentRequested: false,
-        translationRequested: false,
         isRecording: true,
         isProcessing: false,
         isStreaming: true,

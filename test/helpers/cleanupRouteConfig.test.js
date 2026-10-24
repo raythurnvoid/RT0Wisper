@@ -15,7 +15,6 @@ async function loadRouteResolver(t, provider = "test", mode = "providers") {
         export const selectResolvedLLMConfig = () => ({ model: "cleanup-model", provider: ${JSON.stringify(provider)}, mode: ${JSON.stringify(mode)} });
         export const isCloudCleanupMode = () => false;
         export const isCloudDictationAgentMode = () => false;
-        export const isCloudTranslationMode = () => false;
       `,
       "/dictationAgentInference": `
         export const resolveDictationAgentInference = () => ({
@@ -28,14 +27,6 @@ async function loadRouteResolver(t, provider = "test", mode = "providers") {
           active: false,
           model: "",
           config: {},
-        });
-      `,
-      "/dictationTranslationInference": `
-        export const resolveDictationTranslationInference = () => ({
-          reachable: true,
-          model: "translate-model",
-          displayProvider: "test",
-          config: { provider: "test" },
         });
       `,
       "/config/prompts": `
@@ -53,8 +44,8 @@ async function loadRouteResolver(t, provider = "test", mode = "providers") {
   };
   const resolveReasoningRoute = (await vite.ssrLoadModule("/helpers/audioManager.js"))
     .resolveReasoningRoute;
-  return (text, { voiceAgentRequested = false, translationRequested = false } = {}) =>
-    resolveReasoningRoute(text, settings, "Jarvis", voiceAgentRequested, translationRequested);
+  return (text, { voiceAgentRequested = false } = {}) =>
+    resolveReasoningRoute(text, settings, "Jarvis", voiceAgentRequested);
 }
 
 test("the cleanup route pins temperature 0 and requires complete output", async (t) => {
@@ -69,34 +60,14 @@ test("the cleanup route pins temperature 0 and requires complete output", async 
   assert.equal(route.config.reasoningEffort, "medium");
 });
 
-test("the translation chain's cleanup step pins the same config", async (t) => {
-  const resolveRoute = await loadRouteResolver(t);
-
-  const route = resolveRoute("so um translate this", { translationRequested: true });
-
-  assert.equal(route.kind, "translation");
-  assert.equal(route.cleanupConfig.inferenceScope, "dictationCleanup");
-  assert.equal(route.cleanupConfig.temperature, 0);
-  assert.equal(route.cleanupConfig.requireCompleteOutput, true);
-  assert.equal(route.config.temperature, undefined);
-});
-
-test("both Gemini cleanup paths defer temperature to the provider", async (t) => {
+test("Gemini cleanup defers temperature to the provider", async (t) => {
   const resolveRoute = await loadRouteResolver(t, "gemini");
   assert.equal(resolveRoute("clean this").config.temperature, undefined);
-  assert.equal(
-    resolveRoute("translate this", { translationRequested: true }).cleanupConfig.temperature,
-    undefined
-  );
 });
 
 test("a stale Gemini selection does not change other cleanup modes", async (t) => {
   const resolveRoute = await loadRouteResolver(t, "gemini", "local");
   assert.equal(resolveRoute("clean this").config.temperature, 0);
-  assert.equal(
-    resolveRoute("translate this", { translationRequested: true }).cleanupConfig.temperature,
-    0
-  );
 });
 
 test("the agent route keeps its provider defaults", async (t) => {

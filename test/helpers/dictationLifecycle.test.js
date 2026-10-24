@@ -41,10 +41,6 @@ test("the Agent companion mirrors only ordinary dictation lifecycle", () => {
     lifecycle: "idle",
     interactive: false,
   });
-  assert.deepEqual(resolveAgentDictationPillState("processing", "translation"), {
-    lifecycle: "idle",
-    interactive: false,
-  });
 });
 
 test("regular dictation remains available while the assistant panel is open", () => {
@@ -133,17 +129,6 @@ test("the assistant hotkey is blocked while an initial response thinks before th
   );
 });
 
-test("translation remains blocked while the assistant panel owns the shared surface", () => {
-  assert.equal(
-    shouldBlockDictationWhilePanelOpen({ assistantPanelOpen: true, inputKind: "translation" }),
-    true
-  );
-  assert.equal(
-    shouldBlockDictationWhilePanelOpen({ assistantPanelOpen: false, inputKind: "translation" }),
-    false
-  );
-});
-
 test("mic preparation is a first-class lifecycle mirrored only for ordinary dictation", () => {
   assert.equal(normalizeDictationLifecycle("preparing"), "preparing");
   assert.equal(shouldIgnoreDictationHotkey("preparing"), false);
@@ -153,10 +138,6 @@ test("mic preparation is a first-class lifecycle mirrored only for ordinary dict
     interactive: true,
   });
   assert.deepEqual(resolveAgentDictationPillState("preparing", "assistant"), {
-    lifecycle: "idle",
-    interactive: false,
-  });
-  assert.deepEqual(resolveAgentDictationPillState("preparing", "translation"), {
     lifecycle: "idle",
     interactive: false,
   });
