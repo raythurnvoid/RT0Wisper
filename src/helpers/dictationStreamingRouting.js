@@ -161,6 +161,10 @@ export function resolveStreamingProviderName({ settings, context, sttConfig, lan
   if (settings.cloudTranscriptionProvider === "tinfoil") {
     return "tinfoil-realtime";
   }
+  // Mistral dictation streams live; the batch model stays as its fallback.
+  if (context === "dictation" && settings.cloudTranscriptionProvider === "mistral") {
+    return "mistral-realtime";
+  }
   if (
     settings.cloudTranscriptionProvider === "corti" &&
     settings.cloudTranscriptionMode === "byok"
@@ -189,10 +193,14 @@ export function resolveStreamingProviderName({ settings, context, sttConfig, lan
   return sttConfig?.streamingProvider || defaultStreamingProviderName(context);
 }
 
-// Tinfoil and Corti stream on the user's own credentials in either mode (see
+// Tinfoil, Corti and Mistral stream on the user's own credentials in either mode (see
 // realtimeTokenProviders.js), so only the other providers' managed sessions
 // draw on the OpenWhispr Cloud word allowance.
-const OWN_CREDENTIAL_STREAMING_PROVIDERS = new Set(["tinfoil-realtime", "corti"]);
+const OWN_CREDENTIAL_STREAMING_PROVIDERS = new Set([
+  "tinfoil-realtime",
+  "corti",
+  "mistral-realtime",
+]);
 
 export function isCloudMeteredStream({ provider, mode }) {
   return mode === "openwhispr" && !OWN_CREDENTIAL_STREAMING_PROVIDERS.has(provider);

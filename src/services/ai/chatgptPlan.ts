@@ -13,10 +13,12 @@ import { redactProviderBody } from "../../helpers/providerHttpErrors.js";
 // Used when the plan call fails (plan limit hit, sign-in expired, network error).
 const FALLBACK_URL = "https://api.mistral.ai/v1/chat/completions";
 const FALLBACK_MODEL = "ministral-8b-latest";
+const SOCKET_TIMEOUT_MS = 15000;
 
 /**
  * OpenAI cleanup on the user's ChatGPT plan ("Sign in with ChatGPT"). The plan
- * route takes the Responses API with `store: false` and `stream: true`, the
+ * route takes the Responses API (WebSocket mode first, then HTTP with
+ * `stream: true`) with `store: false`, the
  * system prompt as `instructions`, `service_tier: "priority"` (not "fast", which it
  * rejects), and no `temperature` or `max_output_tokens`:
  * https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations
@@ -81,22 +83,41 @@ async function streamPlanResponse(
       },
     ],
     store: false,
-    stream: true,
     // Fast mode, as opencode's "GPT-6 Luna (Fast)" sends it. About 0.4 s faster in
     // tests; the reply still reports "default". Uses plan limits faster.
     service_tier: "priority",
     reasoning: { effort },
   };
 
-  const controller = new AbortController();
   const timeoutSeconds = getLlmRequestTimeoutSeconds({ scope: config.inferenceScope });
+
+  // The WebSocket was opened while the user spoke, so it skips the connect.
+  // HTTP below is the fallback. The socket wait is capped so a hung socket
+  // does not use up the whole timeout before HTTP starts.
+  const viaSocket = await window.electronAPI.chatgptSocketResponse?.(
+    body,
+    Math.min(timeoutSeconds * 1000, SOCKET_TIMEOUT_MS)
+  );
+  if (isRequestCancelled(config.requestId)) throw requestCancelledError();
+  if (viaSocket?.success && viaSocket.text.trim()) {
+    logger.logReasoning("CHATGPT_PLAN_SOCKET", { model, warm: viaSocket.warm });
+    return viaSocket.text.trim();
+  }
+  if (viaSocket) {
+    logger.logReasoning("CHATGPT_PLAN_SOCKET_FALLBACK", {
+      model,
+      error: "error" in viaSocket ? viaSocket.error : "no text",
+    });
+  }
+
+  const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
   const unlinkCancel = abortOnCancel(config.requestId, controller);
   try {
     const res = await fetch(buildApiUrl(API_ENDPOINTS.OPENAI_BASE, "/responses"), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, stream: true }),
       signal: controller.signal,
     });
     if (!res.ok || !res.body) {

@@ -228,6 +228,12 @@ export const useAudioRecording = (toast, options = {}) => {
           audioManagerRef.current.beginToneStyleCapture();
         }
 
+        // Opens the ChatGPT plan socket while the user speaks, so cleanup skips
+        // the connect. It does nothing when not signed in with ChatGPT.
+        if (getSettings().useCleanupModel && getSettings().cleanupProvider === "openai") {
+          window.electronAPI?.chatgptSocketWarmup?.();
+        }
+
         // Retry STT config fetch if it wasn't loaded on mount (e.g. auth wasn't ready),
         // and refresh a copy older than its TTL so a server-side rollout change
         // reaches a long-running app. Await it only when it can change the start

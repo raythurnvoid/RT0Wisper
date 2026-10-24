@@ -413,6 +413,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   chatgptSignOut: () => ipcRenderer.invoke("chatgpt-sign-out"),
   chatgptStatus: () => ipcRenderer.invoke("chatgpt-status"),
   getChatGPTAccessToken: () => ipcRenderer.invoke("chatgpt-access-token"),
+  chatgptSocketWarmup: () => ipcRenderer.invoke("chatgpt-socket-warmup"),
+  chatgptSocketResponse: (body, timeoutMs) =>
+    ipcRenderer.invoke("chatgpt-socket-response", body, timeoutMs),
 
   // Clipboard functions
   checkAccessibilityPermission: (silent) =>

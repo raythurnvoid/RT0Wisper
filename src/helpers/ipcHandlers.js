@@ -16,6 +16,7 @@ const { resolveFailedGpuBackends } = require("./whisper");
 const { WHISPER_GPU_FAILURE_REASON_KEYS } = require("./whisperGpuFailureReason");
 const { BYOK_API_KEYS } = require("../config/secretKeys");
 const chatgptAuth = require("./chatgptAuth");
+const chatgptResponsesSocket = require("./chatgptResponsesSocket");
 const tokenStore = require("./tokenStore");
 const accountScopeBinding = require("./accountScopeBinding");
 const { registerProductHelpIpc, remoteHelpPolicyState } = require("./productHelp");
@@ -131,6 +132,7 @@ const { ONBOARDING_DEMO_KINDS, ONBOARDING_DEMO_STATUSES } = require("./onboardin
 const { focusWindowsHotkeyCaptureWindow } = require("./hotkeyCaptureFocus");
 const { createTinfoilRealtimeSocket } = require("./tinfoilSecureClient");
 const { TINFOIL_REALTIME_MODEL } = require("./tinfoilRealtimeStreaming");
+const { MistralRealtimeStreaming, MISTRAL_REALTIME_MODEL } = require("./mistralRealtimeStreaming");
 const { getTinfoilChatModels } = require("./tinfoilCatalog");
 const { transcribeWithTinfoil } = require("./tinfoilTranscription");
 const { transcribeWithGemini } = require("./geminiTranscription");
@@ -1817,6 +1819,13 @@ class IPCHandlers {
     ipcMain.handle("chatgpt-sign-out", () => chatgptAuth.signOut());
     ipcMain.handle("chatgpt-status", () => chatgptAuth.status());
     ipcMain.handle("chatgpt-access-token", () => chatgptAuth.getAccessToken());
+    ipcMain.handle("chatgpt-socket-warmup", () => chatgptResponsesSocket.warmup());
+    ipcMain.handle("chatgpt-socket-response", (_event, body, timeoutMs) =>
+      chatgptResponsesSocket
+        .createResponse(body, timeoutMs)
+        .then((result) => ({ success: true, ...result }))
+        .catch((error) => ({ success: false, error: error.message }))
+    );
 
     ipcMain.handle("db-save-transcription", async (event, text, rawText, options) => {
       const result = this.databaseManager.saveTranscription(text, rawText, options);
@@ -9057,7 +9066,10 @@ class IPCHandlers {
     // it is part of that route; the other providers never send it at connect.
     const dictationConnectionKey = (options) => {
       const provider = options.provider || "openai-realtime";
-      const readsSavedKey = options.mode === "byok" || provider === "tinfoil-realtime";
+      const readsSavedKey =
+        options.mode === "byok" ||
+        provider === "tinfoil-realtime" ||
+        provider === "mistral-realtime";
       return JSON.stringify([
         provider,
         options.mode,
@@ -9068,6 +9080,8 @@ class IPCHandlers {
         provider === "openai-realtime"
           ? OpenAIRealtimeStreaming.normalizeLanguage(options.language)
           : null,
+        // Mistral fixes the language and word list when the session starts.
+        provider === "mistral-realtime" ? [options.language, options.keyterms] : null,
       ]);
     };
 
@@ -9106,7 +9120,9 @@ class IPCHandlers {
         const streaming =
           provider === "orukeet"
             ? new OrukeetStreaming(isCloud ? MANAGED_STREAM_OPTIONS : {})
-            : new OpenAIRealtimeStreaming();
+            : provider === "mistral-realtime"
+              ? new MistralRealtimeStreaming()
+              : new OpenAIRealtimeStreaming();
         if (provider === "orukeet")
           streaming.onUsageError = (metadata) =>
             debugLogger.error("Combined cleanup usage could not be recorded", metadata);
@@ -9143,7 +9159,14 @@ class IPCHandlers {
             // the server also owns the managed model, so only the language is sent.
             language: OpenAIRealtimeStreaming.normalizeLanguage(options.language) ?? undefined,
           });
-          if (provider === "tinfoil-realtime") {
+          if (provider === "mistral-realtime") {
+            await streaming.connect({
+              apiKey,
+              model: MISTRAL_REALTIME_MODEL,
+              language: options.language,
+              keyterms: options.keyterms,
+            });
+          } else if (provider === "tinfoil-realtime") {
             const model = options.model || TINFOIL_REALTIME_MODEL;
             await streaming.connect({
               apiKey,
@@ -9844,9 +9867,19 @@ class IPCHandlers {
       streaming.audioBytesSent === 0 &&
       streaming.connectionKey === dictationConnectionKey(options);
 
+    // A Mistral socket also carries one dictation, so a fresh one is kept too.
+    const isUnusedMistralConnection = (streaming, options) =>
+      streaming instanceof MistralRealtimeStreaming &&
+      streaming.isConnected &&
+      streaming.audioBytesSent === 0 &&
+      streaming.connectionKey === dictationConnectionKey(options);
+
     const warmupDictationStreaming = async (event, options) => {
       await this._dictationConnectPromise?.catch(() => {});
-      if (!isUnusedOrukeetConnection(this._dictationStreaming, options)) {
+      if (
+        !isUnusedOrukeetConnection(this._dictationStreaming, options) &&
+        !isUnusedMistralConnection(this._dictationStreaming, options)
+      ) {
         await connectDictationStreaming(event, options);
         startDictationIdleTimer();
         return { success: true };
@@ -9885,8 +9918,11 @@ class IPCHandlers {
     });
 
     ipcMain.handle("dictation-realtime-finalize", async () => {
-      if (!(this._dictationStreaming instanceof OrukeetStreaming)) {
-        return { success: false, error: "No Orukeet recording is active" };
+      if (
+        !(this._dictationStreaming instanceof OrukeetStreaming) &&
+        !(this._dictationStreaming instanceof MistralRealtimeStreaming)
+      ) {
+        return { success: false, error: "No Orukeet or Mistral recording is active" };
       }
       try {
         return { success: true, ...(await this._dictationStreaming.finalize()) };

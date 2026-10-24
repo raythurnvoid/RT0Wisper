@@ -509,6 +509,14 @@ const STREAMING_PROVIDERS = {
     onSessionEnd: (cb) => window.electronAPI.onCortiSessionEnd(cb),
   },
   "tinfoil-realtime": makeDictationRealtimeProvider("tinfoil-realtime"),
+  // Finalize sends input_audio.end and returns the final text. Any stream
+  // failure keeps recording and sends the full capture to batch Voxtral.
+  "mistral-realtime": {
+    ...makeDictationRealtimeProvider("mistral-realtime"),
+    finalizeAcknowledged: true,
+    failsOverToBatch: true,
+    finalize: () => window.electronAPI.dictationRealtimeFinalize(),
+  },
 };
 
 // Batch providers that must transcribe via a main-process proxy (CORS,
@@ -4783,6 +4791,10 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       return !!(s.cortiClientId && s.cortiClientSecret);
     }
 
+    if (s.cloudTranscriptionProvider === "mistral") {
+      return isValidApiKey(s.mistralApiKey, "mistral");
+    }
+
     // Tinfoil realtime streams without an OpenWhispr account.
     if (s.cloudTranscriptionProvider === "tinfoil") {
       const provider = getTranscriptionProvider("tinfoil");
@@ -5076,6 +5088,12 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       });
       return { needsFallback: true };
     }
+    // A live stream that cannot start keeps this capture for the batch upload.
+    if (this.getStreamingProvider(this.getActiveStreamingProviderName())?.failsOverToBatch) {
+      this.streamingFallbackReason = "session_unavailable";
+      logger.warn("Live stream unavailable, using batch", { error: res.error }, "streaming");
+      return { needsFallback: true };
+    }
     const fallbackReason = resolveStreamingStartFallback({
       providerName: this.getActiveStreamingProviderName(),
       cloudTranscriptionMode: getSettings().cloudTranscriptionMode,
@@ -5231,10 +5249,11 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       // to; stop finishes that recorder before a refused commit can arrive.
       const failsOver =
         Boolean(this.streamingFallbackRecorder) &&
-        isManagedOrukeetStream({
-          providerName,
-          cloudTranscriptionMode: getSettings().cloudTranscriptionMode,
-        });
+        (provider.failsOverToBatch ||
+          isManagedOrukeetStream({
+            providerName,
+            cloudTranscriptionMode: getSettings().cloudTranscriptionMode,
+          }));
       let heldFrames = null;
 
       this.streamingProcessor.port.onmessage = (event) => {
@@ -5835,6 +5854,13 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     } else {
       provider.finalize?.();
       await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    // A failed live stream has only part of the words: drop them, and the
+    // full recording goes to batch below.
+    if (provider.failsOverToBatch && (!finalAcknowledged || this._streamingFailoverReason)) {
+      this._streamingFailoverReason ??= "stream_no_final";
+      this.streamingFinalText = "";
+      this.streamingPartialText = "";
     }
     if (wasCancelled()) return abandonFinalization();
     const tForceEndpoint = performance.now();
