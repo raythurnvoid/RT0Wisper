@@ -1884,6 +1884,8 @@
     },
     "mic": {
       "hotkeyToSpeak": "{{hotkey}} للتحدث",
+      "isListening": "يستمع",
+      "isProcessing": "يعالج",
       "recording": "جاري التسجيل...",
       "processing": "جاري المعالجة...",
       "clickToSpeak": "انقر للتحدث",

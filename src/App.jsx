@@ -75,6 +75,7 @@ export default function App() {
   // Floating icon auto-hide setting (read from store, synced via IPC)
   const floatingIconAutoHide = useSettingsStore((s) => s.floatingIconAutoHide);
   const panelStartPosition = useSettingsStore((s) => s.panelStartPosition);
+  const useCleanupModel = useSettingsStore((s) => s.useCleanupModel);
   const prevAutoHideRef = useRef(floatingIconAutoHide);
   const [voiceHorizontalDirection, setVoiceHorizontalDirection] = useState(() =>
     resolveVoiceHorizontalDirection(panelStartPosition)
@@ -405,19 +406,20 @@ export default function App() {
     refuse,
   });
 
+  const autoHideIdle =
+    floatingIconAutoHide &&
+    !isRecording &&
+    !isVisuallyProcessing &&
+    toastCount === 0 &&
+    !dictationErrorPillHandoffActive &&
+    !assistant.mounted &&
+    !liveTranscript.mounted;
+
   // Auto-hide the floating icon when idle (setting enabled or dictation cycle completed)
   useEffect(() => {
     let hideTimeout;
 
-    if (
-      floatingIconAutoHide &&
-      !isRecording &&
-      !isVisuallyProcessing &&
-      toastCount === 0 &&
-      !dictationErrorPillHandoffActive &&
-      !assistant.mounted &&
-      !liveTranscript.mounted
-    ) {
+    if (autoHideIdle) {
       // Delay briefly so processing can start after recording stops without a flash
       hideTimeout = setTimeout(() => {
         window.electronAPI?.hideWindow?.();
@@ -428,15 +430,7 @@ export default function App() {
 
     prevAutoHideRef.current = floatingIconAutoHide;
     return () => clearTimeout(hideTimeout);
-  }, [
-    isRecording,
-    isVisuallyProcessing,
-    floatingIconAutoHide,
-    toastCount,
-    dictationErrorPillHandoffActive,
-    assistant.mounted,
-    liveTranscript.mounted,
-  ]);
+  }, [autoHideIdle, floatingIconAutoHide]);
 
   const handleClose = () => {
     window.electronAPI.hideWindow();
@@ -507,6 +501,41 @@ export default function App() {
         : "idle";
   const anyPanelOpen = assistant.open || liveTranscript.open;
   const anyPanelMounted = assistant.mounted || liveTranscript.mounted;
+  // Plain dictation shows one fixed-size status pill that names the model at
+  // work: Voxtral while listening, then Luna while it cleans up the text. The
+  // assistant and the panels keep the original pill.
+  const activeDictationPhase =
+    anyPanelMounted || isAssistantVoice
+      ? null
+      : isRecording || isPreparing
+        ? "listening"
+        : isProcessing || isStopping
+          ? "processing"
+          : null;
+  // With auto-hide on, the pill keeps its last look while it fades out, so it
+  // never shrinks to the idle circle before the window hides.
+  const [heldDictationPhase, setHeldDictationPhase] = useState("listening");
+  useEffect(() => {
+    if (activeDictationPhase) setHeldDictationPhase(activeDictationPhase);
+  }, [activeDictationPhase]);
+  const dictationPhase = activeDictationPhase ?? (autoHideIdle ? heldDictationPhase : null);
+  const dictationStatus = !dictationPhase
+    ? null
+    : dictationPhase === "processing" && useCleanupModel
+      ? {
+          phase: dictationPhase,
+          provider: "openai",
+          model: "Luna GPT-6",
+          activity: t("app.mic.isProcessing"),
+        }
+      : {
+          phase: dictationPhase,
+          provider: "mistral",
+          model: "Voxtral",
+          activity: t(
+            dictationPhase === "processing" ? "app.mic.isProcessing" : "app.mic.isListening"
+          ),
+        };
   const canReopenLiveTranscript =
     shouldOfferLiveTranscriptReopen({
       manuallyCollapsed: liveTranscript.manuallyCollapsed,
@@ -539,9 +568,11 @@ export default function App() {
   // targets, not rendered sizes: the pill transitions between footprints over
   // GROW_TRANSITION, and the skin tweens its geometry to match
   // (usePillFootprintTween in LiquidCancelButton).
-  const cancelPillFootprint = isCompactPill
-    ? VOICE_PILL_FOOTPRINT.recording
-    : VOICE_PILL_FOOTPRINT.idle;
+  const cancelPillFootprint = dictationStatus
+    ? VOICE_PILL_FOOTPRINT.dictation
+    : isCompactPill
+      ? VOICE_PILL_FOOTPRINT.recording
+      : VOICE_PILL_FOOTPRINT.idle;
   const activateVoicePill = () => {
     if (!pillIsInteractive) return;
     if (canReopenLiveTranscript) {
@@ -615,13 +646,16 @@ export default function App() {
   // unmount), and materializes once at its settled dock — one beat, not a
   // condense-then-blink. Live activity opts out of that fold: the pill is the
   // only owner left once beginClose hides the companion.
-  const pillVisuallySuppressed = resolvePillVisualSuppression({
-    dictationErrorSuppressed: dictationErrorSuppressesPill,
-    assistantActionsSuppressed: assistantActionsSuppressPill,
-    assistantClosing: assistant.closing,
-    panelReturnResizeActive,
-    hasLiveActivity: pillHasLiveActivity,
-  });
+  // An idle auto-hide pill is about to hide, so it fades out first.
+  const pillVisuallySuppressed =
+    autoHideIdle ||
+    resolvePillVisualSuppression({
+      dictationErrorSuppressed: dictationErrorSuppressesPill,
+      assistantActionsSuppressed: assistantActionsSuppressPill,
+      assistantClosing: assistant.closing,
+      panelReturnResizeActive,
+      hasLiveActivity: pillHasLiveActivity,
+    });
 
   useLinuxPillInteractivity({
     pillRef: pillPresenceRef,
@@ -687,6 +721,7 @@ export default function App() {
               getAudioLevel={getAudioLevel}
               isDragging={isDragging}
               horizontalDirection={voiceHorizontalDirection}
+              dictationStatus={dictationStatus}
               role={pillIsInteractive ? "button" : "status"}
               tabIndex={pillIsInteractive ? 0 : undefined}
               aria-label={

@@ -3833,6 +3833,8 @@
     },
     "mic": {
       "hotkeyToSpeak": "{{hotkey}} 说话",
+      "isListening": "正在聆听",
+      "isProcessing": "正在处理",
       "recording": "录音中...",
       "processing": "处理中...",
       "clickToSpeak": "点击开始说话",

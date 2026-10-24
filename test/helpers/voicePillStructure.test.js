@@ -85,6 +85,35 @@ test("the pill renders exactly the footprints the native window ladder is sized 
   assert.doesNotMatch(recording, footprint.idle);
 });
 
+test("the dictation status pill keeps one size from listening to processing", async () => {
+  const { VOICE_PILL_FOOTPRINT } = await import("../../src/helpers/voicePillPresentation.js");
+  const size = new RegExp(
+    `style="width:${VOICE_PILL_FOOTPRINT.dictation.width}px;height:${VOICE_PILL_FOOTPRINT.dictation.height}px`
+  );
+  const listening = await renderPill("recording", true, "right", {
+    dictationStatus: {
+      phase: "listening",
+      provider: "mistral",
+      model: "Voxtral",
+      activity: "is listening",
+    },
+  });
+  const processing = await renderPill("thinking", false, "right", {
+    dictationStatus: {
+      phase: "processing",
+      provider: "openai",
+      model: "Luna GPT-6",
+      activity: "is processing",
+    },
+  });
+
+  assert.match(listening, size);
+  assert.match(processing, size);
+  assert.match(listening, /Voxtral<\/span> <span[^>]*>is listening/);
+  assert.match(processing, /Luna GPT-6<\/span> <span[^>]*>is processing/);
+  assert.match(processing, /dictation-pill-ripple-bar/);
+});
+
 test("panel thinking contracts to the identity circle instead of freezing a waveform", async () => {
   const footprint = await pillFootprints();
   const panelThinking = await renderPill("thinking", false, "right", {

@@ -4003,6 +4003,8 @@
     },
     "mic": {
       "hotkeyToSpeak": "{{hotkey}} pour parler",
+      "isListening": "écoute",
+      "isProcessing": "traite le texte",
       "recording": "Enregistrement...",
       "processing": "Traitement...",
       "clickToSpeak": "Cliquez pour parler",

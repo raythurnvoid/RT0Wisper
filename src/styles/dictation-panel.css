@@ -539,6 +539,31 @@
   }
 }
 
+/* The dictation pill's processing bars: a wave that runs left to right. */
+.dictation-pill-ripple-bar {
+  opacity: 0.55;
+  transform: scaleY(0.4);
+  animation: dictation-pill-ripple 1.1s ease-in-out infinite;
+}
+
+@keyframes dictation-pill-ripple {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scaleY(0.4);
+  }
+  40% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dictation-pill-ripple-bar {
+    animation: none;
+  }
+}
+
 /* Let the retained answer recede before the surface sweep begins. The filter
    transitions once and then stays still; only the lightweight sweep repeats. */
 .assistant-response-content {

@@ -129,12 +129,12 @@ function fitDictationErrorWindowToWorkArea(requestedSize, workArea) {
 // classes); the remaining area is click-through headroom so the hover
 // tooltip and the Signal glow's halo render without clipping at the window
 // bounds. Sized with dictation-panel.css's dock insets — change together.
-// The box fits the compact pill + gap + hover cancel (134px) inside its 184px
+// The box fits the widest pill + gap + hover cancel (236px) inside its 236px
 // usable width, so the cancel control never clips. Those three numbers are
-// VOICE_PILL_FOOTPRINT.recording and VOICE_PILL_CANCEL in
+// VOICE_PILL_FOOTPRINT.dictation and VOICE_PILL_CANCEL in
 // src/helpers/voicePillPresentation.js — the renderer-side half of this
 // contract, and the only place they are defined.
-const PILL_WINDOW_SIZE = { width: 208, height: 120 };
+const PILL_WINDOW_SIZE = { width: 260, height: 120 };
 
 const WINDOW_SIZES = {
   // BASE and RECORDING are deliberately the same box. Resizing a transparent

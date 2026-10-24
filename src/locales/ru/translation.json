@@ -3877,6 +3877,8 @@
     },
     "mic": {
       "hotkeyToSpeak": "{{hotkey}} для записи",
+      "isListening": "слушает",
+      "isProcessing": "обрабатывает",
       "recording": "Запись...",
       "processing": "Обработка...",
       "clickToSpeak": "Нажмите для записи",

@@ -3885,6 +3885,8 @@
     },
     "mic": {
       "hotkeyToSpeak": "{{hotkey}} para hablar",
+      "isListening": "está escuchando",
+      "isProcessing": "está procesando",
       "recording": "Grabando...",
       "processing": "Procesando...",
       "clickToSpeak": "Haz clic para hablar",
