@@ -3,9 +3,6 @@ const assert = require("node:assert/strict");
 const { loadAudioManager } = require("./harness/audioManager");
 
 const LOCAL_WHISPER_SETTINGS = {
-  useLocalWhisper: true,
-  localTranscriptionProvider: "whisper",
-  whisperModel: "base",
   cloudTranscriptionMode: "byok",
   isSignedIn: false,
 };
@@ -28,7 +25,7 @@ function createManager(AudioManager, failure) {
     pendingAssistantConversation: null,
     pendingSelectionEdit: null,
     lastAudioBlob: {},
-    processWithLocalWhisper: async () => {
+    processWithOpenAIAPI: async () => {
       throw failure;
     },
     processWithOpenWhisprCloud: async () => {
@@ -42,7 +39,7 @@ function createManager(AudioManager, failure) {
   return { manager, order, saved };
 }
 
-test("local silence becomes one no-audio outcome after processing is idle", async (t) => {
+test("silence becomes one no-audio outcome after processing is idle", async (t) => {
   const AudioManager = await loadManagerClass(t);
   const { manager, order, saved } = createManager(AudioManager, new Error("No audio detected"));
 

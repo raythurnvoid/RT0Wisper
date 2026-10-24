@@ -965,14 +965,6 @@ export const useAudioRecording = (toast, options = {}) => {
             audioManagerRef.current.markCleanupNoticeShown(result.cleanupFailure);
           }
 
-          if (result.source === "openai" && getSettings().useLocalWhisper) {
-            toast({
-              title: t("hooks.audioRecording.fallback.title"),
-              description: t("hooks.audioRecording.fallback.description"),
-              variant: "default",
-            });
-          }
-
           // Cloud usage: limit reached after this transcription
           if (result.source === "openwhispr" && result.limitReached) {
             // Notify control panel to show UpgradePrompt dialog

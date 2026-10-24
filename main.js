@@ -290,8 +290,6 @@ const EnvironmentManager = require("./src/helpers/environment");
 const WindowManager = require("./src/helpers/windowManager");
 const DatabaseManager = require("./src/helpers/database");
 const ClipboardManager = require("./src/helpers/clipboard");
-const WhisperManager = require("./src/helpers/whisper");
-const ParakeetManager = require("./src/helpers/parakeet");
 const TrayManager = require("./src/helpers/tray");
 const dockManager = require("./src/helpers/dockManager");
 const autoStart = require("./src/helpers/autoStart");
@@ -305,14 +303,7 @@ const LinuxKeyManager = require("./src/helpers/linuxKeyManager");
 const TextEditMonitor = require("./src/helpers/textEditMonitor");
 const SelectionManager = require("./src/helpers/selectionManager");
 const { PermissionGuideManager } = require("./src/helpers/permissionGuideManager");
-const WhisperCudaManager = require("./src/helpers/whisperCudaManager");
-const WhisperVulkanManager = require("./src/helpers/whisperVulkanManager");
-const {
-  migrateLegacyBinDir,
-  detectOrphanedGpuPacks,
-  detectOutdatedGpuPacks,
-} = require("./src/helpers/gpuBinaryManager");
-const { resetWhisperGpuFailureOnUpgrade } = require("./src/helpers/whisperGpuUpgradeReset");
+const { migrateLegacyBinDir, detectOrphanedGpuPacks } = require("./src/helpers/gpuBinaryManager");
 const { applyOpenWhisprOriginHeader } = require("./src/helpers/sessionHeaders");
 const { i18nMain, changeLanguage } = require("./src/helpers/i18nMain");
 const { ensureYdotool } = require("./src/helpers/ensureYdotool");
@@ -326,8 +317,6 @@ let windowManager = null;
 let hotkeyManager = null;
 let databaseManager = null;
 let clipboardManager = null;
-let whisperManager = null;
-let parakeetManager = null;
 let trayManager = null;
 let updateManager = null;
 let globeKeyManager = null;
@@ -335,16 +324,12 @@ let windowsKeyManager = null;
 let linuxKeyManager = null;
 let textEditMonitor = null;
 let selectionManager = null;
-let whisperCudaManager = null;
-let whisperVulkanManager = null;
 let ipcHandlers = null;
 let cliBridge = null;
 let globeKeyAlertShown = false;
 let macAccessibilityFeaturesReady = false;
 let startMacAccessibilityFeatures = null;
 let authBridgeServer = null;
-const WHISPER_WAKE_REWARM_DELAY_MS = 3000;
-let wakeRewarmTimer = null;
 
 function parseAuthBridgePort() {
   const raw = (process.env.OPENWHISPR_AUTH_BRIDGE_PORT || "").trim();
@@ -362,7 +347,7 @@ const AUTH_BRIDGE_HOST = "127.0.0.1";
 const AUTH_BRIDGE_PORT = parseAuthBridgePort();
 const AUTH_BRIDGE_PATH = "/oauth/callback";
 
-// Set up PATH for production builds to find system tools (whisper.cpp, ffmpeg)
+// Set up PATH for production builds to find system tools (ffmpeg)
 function setupProductionPath() {
   if (process.platform === "darwin" && process.env.NODE_ENV !== "development") {
     const commonPaths = [
@@ -466,19 +451,12 @@ function initializeCoreManagers() {
   });
   if (bootAccountId) databaseManager.setActiveAccountId(bootAccountId);
   clipboardManager = new ClipboardManager();
-  whisperManager = new WhisperManager();
   if (process.platform !== "darwin") {
-    whisperCudaManager = new WhisperCudaManager();
-    whisperVulkanManager = new WhisperVulkanManager();
     // Heal installs from before GPU packs got per-pack directories; must run
     // before startup pre-warm resolves any GPU binary path.
     const LlamaVulkanManager = require("./src/helpers/llamaVulkanManager");
     const llamaVulkanManager = new LlamaVulkanManager();
-    const clearedPacks = migrateLegacyBinDir([
-      whisperCudaManager,
-      whisperVulkanManager,
-      llamaVulkanManager,
-    ]);
+    const clearedPacks = migrateLegacyBinDir([llamaVulkanManager]);
     if (clearedPacks.length > 0) {
       // No window exists yet — persist the notice; the window that shows it
       // as a toast takes it (#1606, #2554).
@@ -488,38 +466,13 @@ function initializeCoreManagers() {
     // notice, leaving those users on a silent CPU fallback: an enabled flag
     // with no pack on disk only happens via such data loss. recordOnce gates
     // each pack to one notice so a dismissed toast doesn't return every launch.
-    const gpuPacks = [
-      { manager: whisperCudaManager, enabledEnvVar: "WHISPER_CUDA_ENABLED", group: "whisper" },
-      { manager: whisperVulkanManager, enabledEnvVar: "WHISPER_VULKAN_ENABLED", group: "whisper" },
+    const orphanedPacks = detectOrphanedGpuPacks([
       { manager: llamaVulkanManager, enabledEnvVar: "LLAMA_VULKAN_ENABLED" },
-    ];
-    const orphanedPacks = detectOrphanedGpuPacks(gpuPacks);
+    ]);
     if (orphanedPacks.length > 0) {
       require("./src/helpers/gpuPackMigrationNotice").recordOnce(orphanedPacks);
     }
-    // A pack an older release installed that this version can't use (#2424)
-    // otherwise looks like a pack that was never downloaded: say so once per
-    // app version, even to a user who already saw the orphan notice for it.
-    // Only whisper packs can be outdated, so only a user on local whisper
-    // (the only mode whose Settings shows the pack) is told.
-    const outdatedPacks = detectOutdatedGpuPacks(gpuPacks);
-    if (outdatedPacks.length > 0) {
-      const whisperInUse = !!process.env.LOCAL_WHISPER_MODEL;
-      debugLogger.info("GPU packs from an older release need re-downloading", {
-        packs: outdatedPacks,
-        notified: whisperInUse,
-      });
-      if (whisperInUse) {
-        require("./src/helpers/gpuPackMigrationNotice").recordOnce(
-          outdatedPacks,
-          `outdated-${app.getVersion()}`
-        );
-      }
-    }
-    // Lets every server start resolve its GPU backend from installed packs
-    whisperManager.setGpuBinaryManagers({ cuda: whisperCudaManager, vulkan: whisperVulkanManager });
   }
-  parakeetManager = new ParakeetManager();
   updateManager = new UpdateManager();
   updateManager.setWindowManager(windowManager);
   windowsKeyManager = new WindowsKeyManager();
@@ -544,16 +497,12 @@ function initializeCoreManagers() {
     environmentManager,
     databaseManager,
     clipboardManager,
-    whisperManager,
-    parakeetManager,
     windowManager,
     updateManager,
     windowsKeyManager,
     linuxKeyManager,
     textEditMonitor,
     selectionManager,
-    whisperCudaManager,
-    whisperVulkanManager,
     getTrayManager: () => trayManager,
     oauthProtocolRegistered: protocolRegistered,
     oauthProtocol: OAUTH_PROTOCOL,
@@ -561,12 +510,8 @@ function initializeCoreManagers() {
 }
 
 function registerSidecars() {
-  if (whisperManager) sidecarRegistry.register("whisper", () => whisperManager.stopServer());
-  if (parakeetManager) sidecarRegistry.register("parakeet", () => parakeetManager.stopServer());
   const modelManager = require("./src/helpers/modelManagerBridge").default;
   sidecarRegistry.register("llama", () => modelManager.stopServer());
-  const onnxWorkerClient = require("./src/helpers/onnxWorkerClient");
-  sidecarRegistry.register("onnx", () => onnxWorkerClient.stop());
 }
 
 // Phase 2: Non-critical setup after windows are visible
@@ -881,9 +826,6 @@ async function startApp() {
   // Phase 1: Core managers + IPC handlers before windows
   initializeCoreManagers();
   await environmentManager.init();
-  // After any upgrade the GPU gets one fresh attempt: clear the remembered
-  // failure before the whisper pre-warm below resolves its GPU backend.
-  resetWhisperGpuFailureOnUpgrade(environmentManager);
   registerSidecars();
   startAuthBridgeServer();
 
@@ -1035,36 +977,6 @@ async function startApp() {
     // Accessibility-protected event monitors during onboarding.
     await globeKeyManager.restoreLeftoverSystemPreference();
   }
-
-  const { powerMonitor } = require("electron");
-  powerMonitor.on("resume", () => {
-    // Sleep evicts the local GPU model from VRAM; reload it once the driver settles. See #766.
-    if (wakeRewarmTimer) clearTimeout(wakeRewarmTimer);
-    wakeRewarmTimer = setTimeout(() => {
-      wakeRewarmTimer = null;
-      whisperManager?.onWakeFromSleep().catch((err) => {
-        debugLogger.debug("whisper wake re-warm error (non-fatal)", { error: err.message });
-      });
-    }, WHISPER_WAKE_REWARM_DELAY_MS);
-  });
-
-  // Non-blocking server pre-warming; GPU backend resolved by the manager
-  const whisperSettings = {
-    localTranscriptionProvider: process.env.LOCAL_TRANSCRIPTION_PROVIDER || "",
-    whisperModel: process.env.LOCAL_WHISPER_MODEL,
-  };
-  whisperManager.initializeAtStartup(whisperSettings).catch((err) => {
-    debugLogger.debug("Whisper startup init error (non-fatal)", { error: err.message });
-  });
-
-  const parakeetSettings = {
-    localTranscriptionProvider: process.env.LOCAL_TRANSCRIPTION_PROVIDER || "",
-    parakeetModel: process.env.PARAKEET_MODEL,
-    language: process.env.DICTATION_LANGUAGE,
-  };
-  parakeetManager.initializeAtStartup(parakeetSettings).catch((err) => {
-    debugLogger.debug("Parakeet startup init error (non-fatal)", { error: err.message });
-  });
 
   // TODO: drop legacy REASONING_PROVIDER / LOCAL_REASONING_MODEL fallbacks after 2 releases.
   const cleanupProvider = process.env.CLEANUP_PROVIDER || process.env.REASONING_PROVIDER;
@@ -1716,10 +1628,6 @@ if (gotSingleInstanceLock) {
 }
 
 function performSyncTeardown() {
-  if (wakeRewarmTimer) {
-    clearTimeout(wakeRewarmTimer);
-    wakeRewarmTimer = null;
-  }
   if (authBridgeServer) {
     authBridgeServer.close();
     authBridgeServer = null;

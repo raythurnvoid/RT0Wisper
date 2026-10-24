@@ -249,17 +249,12 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       try {
         const s = getSettings();
         const result = await window.electronAPI.retryTranscription(id, {
-          useLocalWhisper: s.useLocalWhisper,
-          localTranscriptionProvider: s.localTranscriptionProvider,
           cloudTranscriptionMode: s.cloudTranscriptionMode,
           cloudTranscriptionProvider: s.cloudTranscriptionProvider,
           cloudTranscriptionModel: s.cloudTranscriptionModel,
           cloudTranscriptionBaseUrl: s.cloudTranscriptionBaseUrl,
           cortiEnvironment: s.cortiEnvironment,
           cortiTenant: s.cortiTenant,
-          parakeetModel: s.parakeetModel,
-          cohereModel: s.cohereModel,
-          whisperModel: s.whisperModel,
           preferredLanguage: s.preferredLanguage,
           transcriptionMode: s.transcriptionMode,
           remoteTranscriptionType: s.remoteTranscriptionType,

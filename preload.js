@@ -204,8 +204,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   ),
 
   importAudioFile: () => ipcRenderer.invoke("import-audio-file"),
-  transcribeAudioFile: (filePath, options) =>
-    ipcRenderer.invoke("transcribe-audio-file", filePath, options),
 
   onTranscriptionAdded: (callback) => {
     const listener = (_event, transcription) => callback?.(transcription);
@@ -256,42 +254,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   saveTempAudio: (buffer) => ipcRenderer.invoke("save-temp-audio", buffer),
   deleteTempAudio: (tempPath) => ipcRenderer.invoke("delete-temp-audio", tempPath),
 
-  // Local Whisper functions (whisper.cpp)
-  transcribeLocalWhisper: (audioBlob, options) =>
-    ipcRenderer.invoke("transcribe-local-whisper", audioBlob, options),
-  downloadWhisperModel: (modelName) => ipcRenderer.invoke("download-whisper-model", modelName),
-  onWhisperDownloadProgress: registerListener("whisper-download-progress"),
-  listWhisperModels: () => ipcRenderer.invoke("list-whisper-models"),
-  deleteWhisperModel: (modelName) => ipcRenderer.invoke("delete-whisper-model", modelName),
-  cancelWhisperDownload: () => ipcRenderer.invoke("cancel-whisper-download"),
-
-  whisperGpuRetry: () => ipcRenderer.invoke("whisper-gpu-retry"),
-
-  onCudaFallbackNotification: registerListener(
-    "cuda-fallback-notification",
-    (callback) => () => callback()
-  ),
-
-  onGpuFallbackNotification: registerListener(
-    "gpu-fallback-notification",
-    (callback) => () => callback()
-  ),
-
   // One-time "GPU pack needs re-downloading" notice
   takeGpuPackMigrationNotice: () => ipcRenderer.invoke("take-gpu-pack-migration-notice"),
   onGpuPackMigrationNoticeReady: registerListener(
     "gpu-pack-migration-notice-ready",
     (callback) => () => callback()
   ),
-
-  // Local Parakeet (NVIDIA) functions
-  transcribeLocalParakeet: (audioBlob, options) =>
-    ipcRenderer.invoke("transcribe-local-parakeet", audioBlob, options),
-  downloadParakeetModel: (modelName) => ipcRenderer.invoke("download-parakeet-model", modelName),
-  onParakeetDownloadProgress: registerListener("parakeet-download-progress"),
-  listParakeetModels: () => ipcRenderer.invoke("list-parakeet-models"),
-  deleteParakeetModel: (modelName) => ipcRenderer.invoke("delete-parakeet-model", modelName),
-  cancelParakeetDownload: () => ipcRenderer.invoke("cancel-parakeet-download"),
 
   // Window control functions
   windowMinimize: () => ipcRenderer.invoke("window-minimize"),
@@ -726,13 +694,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     (callback) => (_event, payload) => callback(payload)
   ),
   onPreviewHide: registerListener("preview-hide", (callback) => () => callback()),
-  startDictationPreview: (opts) => ipcRenderer.invoke("start-dictation-preview", opts),
   stopDictationPreview: (opts) => ipcRenderer.invoke("stop-dictation-preview", opts),
   dismissDictationPreview: () => ipcRenderer.invoke("dismiss-dictation-preview"),
   updateDictationPreview: (text) => ipcRenderer.invoke("update-dictation-preview", text),
   completeDictationPreview: (payload) => ipcRenderer.invoke("complete-dictation-preview", payload),
   hideDictationPreview: () => ipcRenderer.invoke("hide-dictation-preview"),
-  sendDictationPreviewAudio: (data) => ipcRenderer.send("dictation-preview-audio", data),
 
   // Agent cloud streaming (event-based for real-time chunks)
   startAgentStream: (requestId, messages, opts) =>

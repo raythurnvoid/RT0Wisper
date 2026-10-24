@@ -10,18 +10,14 @@
 //    user flags from ~/.config/open-whispr-flags.conf, and falls back to
 //    --no-sandbox where the Chromium sandbox cannot work (AppImage/tar.gz
 //    on distros that restrict unprivileged user namespaces).
-// 3. Fails the build if required binaries (ffmpeg-static, ps-list vendor exe,
-//    onnx worker script) are missing from app.asar.unpacked/.
+// 3. Fails the build if required binaries (ffmpeg-static, ps-list vendor exe)
+//    are missing from app.asar.unpacked/.
 
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
 const { Arch } = require("app-builder-lib");
 const { buildLinuxWrapperScript } = require("./lib/linux-launcher");
-const {
-  WINDOWS_ONNXRUNTIME_PRIVATE_NAME,
-  WINDOWS_ONNXRUNTIME_UPSTREAM_NAME,
-} = require("./download-sherpa-onnx");
 
 // ---------------------------------------------------------------------------
 // macOS resource binary signing
@@ -213,47 +209,6 @@ function wrapLinuxBinary(context) {
   fs.writeFileSync(binaryPath, buildLinuxWrapperScript(binaryName), { mode: 0o755 });
 }
 
-function verifyMeetingAecHelper(context) {
-  const platform = context.electronPlatformName;
-  const archName = Arch[context.arch];
-
-  if (!["darwin", "linux", "win32"].includes(platform)) {
-    return;
-  }
-
-  const binaryName = `meeting-aec-helper-${platform}-${archName}${platform === "win32" ? ".exe" : ""}`;
-  const resourcesDir = resolveResourcesDir(context);
-  const binaryPath = path.join(resourcesDir, "bin", binaryName);
-
-  if (!fs.existsSync(binaryPath)) {
-    console.warn(`  afterPack: missing optional meeting AEC helper (${binaryName})`);
-    return;
-  }
-
-  if (platform !== "win32") {
-    fs.chmodSync(binaryPath, 0o755);
-  }
-}
-
-// download-sherpa-onnx.js renames the bundled ONNX Runtime so the Windows
-// loader can never resolve it to C:\Windows\System32\onnxruntime.dll (#2054).
-// A stray onnxruntime.dll or a missing private DLL means that step was skipped
-// (stale cache, older marker) and Parakeet would die at startup for the user.
-function verifyWindowsOnnxRuntimePrivatized(binDir) {
-  const strayPath = path.join(binDir, WINDOWS_ONNXRUNTIME_UPSTREAM_NAME);
-  if (fs.existsSync(strayPath)) {
-    throw new Error(
-      `afterPack: ${WINDOWS_ONNXRUNTIME_UPSTREAM_NAME} must not ship (${strayPath}) — download-sherpa-onnx.js renames it to ${WINDOWS_ONNXRUNTIME_PRIVATE_NAME}; re-run the sherpa download with --force`
-    );
-  }
-  const privatePath = path.join(binDir, WINDOWS_ONNXRUNTIME_PRIVATE_NAME);
-  if (!fs.existsSync(privatePath)) {
-    throw new Error(
-      `afterPack: missing ${privatePath} — the bundled ONNX Runtime was not extracted and renamed; Parakeet would die at startup on Windows`
-    );
-  }
-}
-
 // compile:winkeys and download:windows-key-listener only warn when they can't
 // produce the key listener, so without this check a build ships where Hold and
 // modifier-only hotkeys (the default Control+Super) never fire (#2005).
@@ -283,13 +238,6 @@ function verifyUnpackedBinaries(context) {
     );
   }
 
-  const onnxWorkerPath = path.join(unpackedDir, "src", "workers", "onnxWorker.js");
-  if (!fs.existsSync(onnxWorkerPath)) {
-    throw new Error(
-      `afterPack: missing ${onnxWorkerPath} — src/workers was not unpacked from app.asar (asarUnpack/packaging failure); the ONNX utility process would crash-loop in the packed app`
-    );
-  }
-
   // electron-builder strips *.exe from node_modules on non-Windows targets,
   // so the ps-list vendor executable only exists in Windows builds.
   if (isWindows) {
@@ -302,9 +250,7 @@ function verifyUnpackedBinaries(context) {
         `afterPack: no fastlist-*.exe in ${psListVendorDir} — ps-list vendor executable was not unpacked from app.asar (asarUnpack/packaging failure); Windows process detection would break`
       );
     }
-    const binDir = path.join(resolveResourcesDir(context), "bin");
-    verifyWindowsOnnxRuntimePrivatized(binDir);
-    verifyWindowsKeyListener(binDir);
+    verifyWindowsKeyListener(path.join(resolveResourcesDir(context), "bin"));
   }
 
   console.log("  afterPack: verified unpacked bundled binaries");
@@ -317,10 +263,8 @@ function verifyUnpackedBinaries(context) {
 exports.default = async function (context) {
   stripOnnxruntimeBinaries(context);
   wrapLinuxBinary(context);
-  verifyMeetingAecHelper(context);
   verifyUnpackedBinaries(context);
   registerMacResourceBinariesForSigning(context);
 };
 
-exports.verifyWindowsOnnxRuntimePrivatized = verifyWindowsOnnxRuntimePrivatized;
 exports.verifyWindowsKeyListener = verifyWindowsKeyListener;

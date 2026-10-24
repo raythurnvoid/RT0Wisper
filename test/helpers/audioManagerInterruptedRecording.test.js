@@ -328,7 +328,7 @@ function processingManager(createManager, transcription) {
     pendingAssistantConversation: null,
     pendingSelectionEdit: null,
     lastAudioBlob: audio(),
-    processWithLocalWhisper: () => transcription,
+    processWithOpenAIAPI: () => transcription,
     onStateChange() {},
     onNoAudio() {},
     onError() {},
@@ -336,12 +336,7 @@ function processingManager(createManager, transcription) {
 }
 
 test("processing hands the delivered result, or the failed save, to its pipeline", async (t) => {
-  const { createManager } = await load(t, {
-    ...keptAudio,
-    useLocalWhisper: true,
-    localTranscriptionProvider: "whisper",
-    whisperModel: "base",
-  });
+  const { createManager } = await load(t, { ...keptAudio, cloudTranscriptionMode: "byok" });
   const delivered = Promise.resolve("delivered");
   const succeeding = processingManager(
     createManager,

@@ -62,7 +62,6 @@ export const STREAMING_ONLY_PROVIDERS = new Set(["deepgram", "assemblyai"]);
 
 export interface TranscriptionRouteSettings {
   transcriptionMode?: string;
-  useLocalWhisper?: boolean;
   remoteTranscriptionUrl?: string;
   remoteTranscriptionModel?: string;
   cloudTranscriptionProvider?: string;
@@ -113,7 +112,6 @@ export interface TranscriptionRouteInput {
 
 export type TranscriptionRoute =
   | { transport: "error"; message: string; code?: string; messageKey?: string }
-  | { transport: "local" }
   | {
       transport: "proxied";
       provider: "tinfoil" | "mistral" | "xai" | "corti" | "gemini";
@@ -284,7 +282,7 @@ export function resolveTranscriptionRoute({
   if (
     managed &&
     !isTranscriptionSelectionAllowed(policy!, {
-      mode: (s.transcriptionMode || (s.useLocalWhisper ? "local" : "providers")) as never,
+      mode: (s.transcriptionMode || "providers") as never,
       provider: s.cloudTranscriptionProvider || "",
     })
   ) {
@@ -295,9 +293,8 @@ export function resolveTranscriptionRoute({
     );
   }
 
-  // Self-hosted wins over everything, including stale useLocalWhisper flags.
-  // The route needs a configured URL: `byok + custom` also persists
-  // transcriptionMode="self-hosted" (deriveTranscriptionMode), so
+  // Self-hosted wins over everything. The route needs a configured URL:
+  // `byok + custom` also persists transcriptionMode="self-hosted" (deriveTranscriptionMode), so
   // mode-without-URL falls through to the custom branch (fail-closed there)
   // instead of breaking that population, and everything else fails closed.
   if (s.transcriptionMode === "self-hosted") {
@@ -323,11 +320,6 @@ export function resolveTranscriptionRoute({
     if (s.cloudTranscriptionProvider !== "custom") {
       return error("Self-hosted transcription URL is not configured");
     }
-  }
-
-  // Engine and model selection stay with the local managers.
-  if (s.useLocalWhisper) {
-    return { transport: "local" };
   }
 
   const provider = s.cloudTranscriptionProvider || "openai";

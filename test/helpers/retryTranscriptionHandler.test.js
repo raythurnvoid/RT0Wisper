@@ -86,8 +86,6 @@ const cortiCalls = [];
 const tinfoilCalls = [];
 const textUpdates = [];
 const statusUpdates = [];
-let parakeetBehavior = async () => ({ success: true, text: "local text" });
-let whisperBehavior = async () => ({ success: true, text: "whisper text" });
 let cortiBehavior = async () => ({ text: "corti text" });
 
 // Kept installed for the whole file: the corti client is require()d lazily at
@@ -174,13 +172,6 @@ function buildFakeThis() {
       updateTranscriptionStatus: (id, status) => statusUpdates.push({ id, status }),
       updateTranscriptionAudio: () => {},
       getTranscriptionById: (id) => dbRows.get(id),
-    },
-    parakeetManager: {
-      transcribeLocalParakeet: (buffer, options) => parakeetBehavior(buffer, options),
-    },
-    whisperManager: {
-      serverManager: { isAvailable: () => true },
-      transcribeLocalWhisper: (buffer, options) => whisperBehavior(buffer, options),
     },
     _resolveWhisperVadOptions: () => ({}),
     environmentManager: {
@@ -405,114 +396,6 @@ test("retry: a custom URL on Tinfoil's host is refused in the main process", asy
   assert.equal(tinfoilCalls.length, 0);
 });
 
-const PARAKEET_SETTINGS = {
-  transcriptionMode: "local",
-  useLocalWhisper: true,
-  localTranscriptionProvider: "nvidia",
-  parakeetModel: "parakeet-tdt-0.6b-v3",
-};
-const WHISPER_SETTINGS = {
-  transcriptionMode: "local",
-  useLocalWhisper: true,
-  localTranscriptionProvider: "whisper",
-  whisperModel: "base",
-};
-
-async function withLocalResult(behavior, settings, run) {
-  const key = settings === WHISPER_SETTINGS ? "whisper" : "parakeet";
-  const original = key === "whisper" ? whisperBehavior : parakeetBehavior;
-  if (key === "whisper") whisperBehavior = behavior;
-  else parakeetBehavior = behavior;
-  textUpdates.length = 0;
-  statusUpdates.length = 0;
-  try {
-    return await run(await invoke(settings));
-  } finally {
-    if (key === "whisper") whisperBehavior = original;
-    else parakeetBehavior = original;
-  }
-}
-
-test("retry: a clean local decode reports no warning", async () => {
-  await withLocalResult(
-    async () => ({ success: true, text: "local text" }),
-    PARAKEET_SETTINGS,
-    (result) => {
-      assert.equal(result.success, true);
-      assert.equal("warning" in result, false);
-      assert.deepEqual(textUpdates, [{ id: 7, text: "local text" }]);
-    }
-  );
-});
-
-test("retry: a truncated Parakeet decode keeps its text and returns the warning", async () => {
-  await withLocalResult(
-    async () => ({ success: true, text: "first half", warning: "truncated" }),
-    PARAKEET_SETTINGS,
-    (result) => {
-      assert.equal(result.success, true);
-      assert.equal(result.warning, "truncated", "the renderer needs it for the partial toast");
-      assert.deepEqual(textUpdates, [{ id: 7, text: "first half" }]);
-      assert.deepEqual(statusUpdates, [{ id: 7, status: "completed" }]);
-    }
-  );
-});
-
-test("retry: an all-empty Parakeet decode reports the invalid response, not a missing engine", async () => {
-  await withLocalResult(
-    async () => ({
-      success: false,
-      error: "invalid_response",
-      message: "Transcription engine returned an unexpected response",
-    }),
-    PARAKEET_SETTINGS,
-    (result) => {
-      assert.equal(result.success, false);
-      assert.equal(result.code, "INVALID_RESPONSE");
-      assert.equal(result.messageKey, "controlPanel.history.retryErrors.invalidResponse");
-      assert.equal(result.error, "Transcription engine returned an unexpected response");
-      assert.equal(textUpdates.length, 0, "a failed retry must leave the row alone");
-      assert.equal(statusUpdates.length, 0);
-    }
-  );
-});
-
-test("retry: no speech from a local engine is reported as such", async (t) => {
-  for (const [name, settings, failure] of [
-    [
-      "parakeet",
-      PARAKEET_SETTINGS,
-      { success: false, code: "NO_SPEECH_DETECTED", message: "No audio detected" },
-    ],
-    ["whisper", WHISPER_SETTINGS, { success: false, message: "No audio detected" }],
-  ]) {
-    await t.test(name, () =>
-      withLocalResult(
-        async () => failure,
-        settings,
-        (result) => {
-          assert.equal(result.success, false);
-          assert.equal(result.code, "NO_SPEECH_DETECTED");
-          assert.equal(result.messageKey, "notes.upload.noSpeechDetected");
-          assert.equal(textUpdates.length, 0);
-        }
-      )
-    );
-  }
-});
-
-test("retry: an unclassified local failure keeps the engine's own message", async () => {
-  await withLocalResult(
-    async () => ({ success: false, error: "decode_failed", message: "Decoder crashed" }),
-    PARAKEET_SETTINGS,
-    (result) => {
-      assert.equal(result.success, false);
-      assert.equal(result.error, "Decoder crashed");
-      assert.equal(result.messageKey, undefined);
-    }
-  );
-});
-
 const CLOUD_SETTINGS = {
   transcriptionMode: "providers",
   cloudTranscriptionMode: "openwhispr",
@@ -536,7 +419,7 @@ async function withCloudResponse(t, respond, id) {
   return retryHandler({ sender: { window: {} } }, id, CLOUD_SETTINGS);
 }
 
-test("retry: no speech from OpenWhispr Cloud is translated like a local engine's", async (t) => {
+test("retry: no speech from OpenWhispr Cloud is reported as no speech", async (t) => {
   const result = await withCloudResponse(
     t,
     () => ({

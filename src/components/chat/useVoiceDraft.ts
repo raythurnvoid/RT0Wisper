@@ -27,11 +27,6 @@ export function useVoiceDraft({ onTranscript, onError }: UseVoiceDraftOptions) {
   const { isSignedIn } = useAuth();
   const settings = useSettings();
   const {
-    useLocalWhisper,
-    whisperModel,
-    localTranscriptionProvider,
-    parakeetModel,
-    cohereModel,
     cloudTranscriptionMode,
     cloudTranscriptionProvider,
     cloudTranscriptionBaseUrl,
@@ -56,12 +51,7 @@ export function useVoiceDraft({ onTranscript, onError }: UseVoiceDraftOptions) {
   const discardRef = useRef(false);
 
   const buildConfig = (): FileTranscriptionConfig => ({
-    useLocalWhisper,
-    localTranscriptionProvider: localTranscriptionProvider as string,
-    whisperModel,
-    parakeetModel,
-    cohereModel,
-    isOpenWhisprCloud: isSignedIn && cloudTranscriptionMode === "openwhispr" && !useLocalWhisper,
+    isOpenWhisprCloud: isSignedIn && cloudTranscriptionMode === "openwhispr",
     getApiKey: () => getTranscriptionApiKey(cloudTranscriptionProvider as string, settings),
     cloudTranscriptionProvider: cloudTranscriptionProvider as string,
     cloudTranscriptionBaseUrl: cloudTranscriptionBaseUrl || "",
@@ -79,10 +69,7 @@ export function useVoiceDraft({ onTranscript, onError }: UseVoiceDraftOptions) {
   // provider cannot serve; the caller disables the mic rather than letting a
   // take record straight into that failure.
   const config = buildConfig();
-  const route =
-    config.isOpenWhisprCloud || config.useLocalWhisper
-      ? null
-      : resolveFileTranscriptionRoute(config);
+  const route = config.isOpenWhisprCloud ? null : resolveFileTranscriptionRoute(config);
   const streamingOnlyProvider =
     route?.transport === "error" && route.code === "STREAMING_ONLY_PROVIDER";
 

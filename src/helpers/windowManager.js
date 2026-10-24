@@ -30,7 +30,19 @@ const {
 } = require("./dictationLifecycle");
 const { DEV_SERVER_PORT } = DevServerManager;
 const DRAG_MOVE_TOLERANCE_PX = 2;
-const { MAIN_WINDOW_CONFIG, CONTROL_PANEL_CONFIG, ONBOARDING_WINDOW_SIZES, NOTIFICATION_WINDOW_CONFIG, fitAssistantContentWindowToWorkArea, fitAssistantWindowToWorkArea, fitDictationErrorContentWindowToWorkArea, fitDictationErrorWindowToWorkArea, resolveHorizontalWindowDirection, WINDOW_SIZES, WindowPositionUtil } = require("./windowConfig");
+const {
+  MAIN_WINDOW_CONFIG,
+  CONTROL_PANEL_CONFIG,
+  ONBOARDING_WINDOW_SIZES,
+  NOTIFICATION_WINDOW_CONFIG,
+  fitAssistantContentWindowToWorkArea,
+  fitAssistantWindowToWorkArea,
+  fitDictationErrorContentWindowToWorkArea,
+  fitDictationErrorWindowToWorkArea,
+  resolveHorizontalWindowDirection,
+  WINDOW_SIZES,
+  WindowPositionUtil,
+} = require("./windowConfig");
 const AGENT_DICTATION_PILL_SIZE = Object.freeze({ ...WINDOW_SIZES.BASE });
 const { centeredBounds, clampedBounds } = require("./onboardingWindowBounds");
 const { isOnboardingInputAllowed } = require("./onboardingInputPolicy");
@@ -1415,13 +1427,6 @@ class WindowManager {
       this.mainWindow.showInactive();
       this.enforceMainWindowOnTop();
     }
-  }
-
-  appendTranscriptionPreview(text) {
-    if (this._onboardingActive) return;
-    if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
-    this.mainWindow.webContents.send("preview-append", text);
-    this._sendAgentDictationPreview("preview-append", text);
   }
 
   holdTranscriptionPreview(options = {}) {

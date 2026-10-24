@@ -26,12 +26,11 @@ const MANAGED_OPENAI_ONLY = {
   },
 };
 
-test("self-hosted routes to the configured server and wins over stale flags", async () => {
+test("self-hosted routes to the configured server", async () => {
   const route = await resolve({
     transcriptionMode: "self-hosted",
     remoteTranscriptionUrl: "http://192.168.1.5:11434/v1",
     remoteTranscriptionModel: "whisper-1",
-    useLocalWhisper: true,
     cloudTranscriptionProvider: "mistral",
   });
   assert.equal(route.transport, "http-batch");
@@ -79,12 +78,6 @@ test("self-hosted fails closed on invalid or public-http URLs", async () => {
     assert.equal(route.transport, "error", remoteTranscriptionUrl);
     assert.match(route.message, /invalid or unsupported/, remoteTranscriptionUrl);
   }
-});
-
-test("local mode yields a bare local route; decode details stay with the local managers", async () => {
-  assert.deepEqual(await resolve({ useLocalWhisper: true, whisperModel: "small" }), {
-    transport: "local",
-  });
 });
 
 test("proxied providers carry their quirks as route data", async () => {
@@ -377,7 +370,6 @@ test("a managed resolution outranks every personal setting", async () => {
     {
       transcriptionMode: "self-hosted",
       remoteTranscriptionUrl: "http://192.168.1.5:11434/v1",
-      useLocalWhisper: true,
       cloudTranscriptionProvider: "custom",
       cloudTranscriptionBaseUrl: "https://example.test/v1",
       preferredLanguage: "de-DE",

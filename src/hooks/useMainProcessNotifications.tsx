@@ -4,8 +4,8 @@ import { ToastActionButton } from "../components/ui/Toast";
 import type { ToastContextType } from "../components/ui/useToast";
 
 /**
- * Surfaces main-process notifications (hotkey fallback/failure, GPU fallback,
- * learned dictionary corrections) as toasts in the dictation window.
+ * Surfaces main-process notifications (hotkey fallback/failure, learned
+ * dictionary corrections) as toasts in the dictation window.
  */
 export function useMainProcessNotifications({
   toast,
@@ -37,33 +37,6 @@ export function useMainProcessNotifications({
         duration: 10000,
       });
     });
-
-    const showGpuFallbackToast = () => {
-      let toastId: string;
-      toastId = toast({
-        title: t("app.toasts.gpuFallback.title"),
-        description: t("app.toasts.gpuFallback.description"),
-        duration: 10000,
-        action: (
-          <ToastActionButton
-            onClick={async () => {
-              try {
-                const result = await window.electronAPI?.whisperGpuRetry?.();
-                if (result?.success) dismiss(toastId);
-              } catch {
-                // silently fail — toast stays up for another attempt
-              }
-            }}
-          >
-            {t("app.toasts.gpuFallback.retry")}
-          </ToastActionButton>
-        ),
-      });
-    };
-    const unsubscribeCudaFallback =
-      window.electronAPI?.onCudaFallbackNotification?.(showGpuFallbackToast);
-    const unsubscribeGpuFallback =
-      window.electronAPI?.onGpuFallbackNotification?.(showGpuFallbackToast);
 
     const unsubscribeCorrections = window.electronAPI?.onCorrectionsLearned?.((words) => {
       if (words && words.length > 0) {
@@ -101,8 +74,6 @@ export function useMainProcessNotifications({
     return () => {
       unsubscribeFallback?.();
       unsubscribeFailed?.();
-      unsubscribeCudaFallback?.();
-      unsubscribeGpuFallback?.();
       unsubscribeCorrections?.();
     };
   }, [toast, dismiss, t]);

@@ -3,11 +3,7 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useDialogs } from "./useDialogs";
 import { useToast } from "../components/ui/useToast";
-import type {
-  LocalLLMDownloadProgressEvent,
-  LocalModelDownloadStatus,
-  WhisperDownloadProgressData,
-} from "../types/electron";
+import type { LocalLLMDownloadProgressEvent, LocalModelDownloadStatus } from "../types/electron";
 import { clearMissingLocalModelSelections } from "../stores/settingsStore";
 import "../types/electron";
 
@@ -32,7 +28,7 @@ export interface DownloadProgress {
   eta?: number;
 }
 
-export type ModelType = "whisper" | "llm" | "parakeet";
+export type ModelType = "llm";
 
 interface UseModelDownloadOptions {
   modelType: ModelType;
@@ -210,34 +206,6 @@ export function useModelDownload({
     [settleDownload, showAlertDialog, t]
   );
 
-  const handleNativeProgress = useCallback(
-    (data: WhisperDownloadProgressData) => {
-      if (data.type === "complete" || data.type === "error") {
-        void handleTerminalDownload(data.model, data.type, data.error, data.code, data.sequence);
-        return;
-      }
-      if (data.type !== "progress" && data.type !== "installing") return;
-
-      const isInstalling = data.type === "installing";
-      if (!isInstalling) {
-        const now = Date.now();
-        const lastUpdate = lastProgressUpdateRef.current[data.model] || 0;
-        if (now - lastUpdate < PROGRESS_THROTTLE_MS) return;
-        lastProgressUpdateRef.current[data.model] = now;
-      }
-      updateDownload({
-        modelType,
-        modelId: data.model,
-        phase: isInstalling ? "installing" : "downloading",
-        progress: isInstalling ? data.percentage || 100 : data.percentage || 0,
-        downloadedBytes: isInstalling ? 0 : data.downloaded_bytes || 0,
-        totalBytes: isInstalling ? 0 : data.total_bytes || 0,
-        sequence: data.sequence || 0,
-      });
-    },
-    [handleTerminalDownload, modelType, updateDownload]
-  );
-
   const handleLLMProgress = useCallback(
     (_event: unknown, data: LLMDownloadProgressData) => {
       if (data.type === "complete") {
@@ -266,18 +234,9 @@ export function useModelDownload({
   );
 
   useEffect(() => {
-    const dispose =
-      modelType === "whisper"
-        ? window.electronAPI?.onWhisperDownloadProgress((_event, data) =>
-            handleNativeProgress(data)
-          )
-        : modelType === "parakeet"
-          ? window.electronAPI?.onParakeetDownloadProgress((_event, data) =>
-              handleNativeProgress(data)
-            )
-          : window.electronAPI?.onModelDownloadProgress(handleLLMProgress);
+    const dispose = window.electronAPI?.onModelDownloadProgress(handleLLMProgress);
     return () => dispose?.();
-  }, [handleLLMProgress, handleNativeProgress, modelType]);
+  }, [handleLLMProgress]);
 
   useEffect(() => {
     let disposed = false;
@@ -294,11 +253,7 @@ export function useModelDownload({
 
   const downloadModel = useCallback(
     async (modelId: string, onSelectAfterDownload?: (id: string) => void) => {
-      if (
-        ownedRequestsRef.current.has(modelId) ||
-        downloads[modelId] ||
-        (modelType !== "llm" && Object.keys(downloads).length > 0)
-      ) {
+      if (ownedRequestsRef.current.has(modelId) || downloads[modelId]) {
         toast({
           title: t("hooks.modelDownload.downloadInProgress.title"),
           description: t("hooks.modelDownload.downloadInProgress.description"),
@@ -327,12 +282,7 @@ export function useModelDownload({
       let isDuplicateRequest = false;
 
       try {
-        const result =
-          modelType === "whisper"
-            ? await window.electronAPI?.downloadWhisperModel(modelId)
-            : modelType === "parakeet"
-              ? await window.electronAPI?.downloadParakeetModel(modelId)
-              : await window.electronAPI?.modelDownload?.(modelId);
+        const result = await window.electronAPI?.modelDownload?.(modelId);
 
         if (result?.success) {
           notifyLocalModelsChanged();
@@ -342,8 +292,7 @@ export function useModelDownload({
           const activeDownloads = await window.electronAPI?.modelGetActiveDownloads?.();
           if (ownedRequestsRef.current.get(modelId)) return;
           const activeDownload = activeDownloads?.find(
-            (status) =>
-              status.modelType === modelType && (modelType !== "llm" || status.modelId === modelId)
+            (status) => status.modelType === modelType && status.modelId === modelId
           );
           if (activeDownload) {
             updateDownload(activeDownload);
@@ -410,37 +359,15 @@ export function useModelDownload({
   const deleteModel = useCallback(
     async (modelId: string, onComplete?: () => void) => {
       try {
-        if (modelType === "whisper") {
-          const result = await window.electronAPI?.deleteWhisperModel(modelId);
-          if (result?.success) {
-            toast({
-              title: t("hooks.modelDownload.modelDeleted.title"),
-              description: t("hooks.modelDownload.modelDeleted.descriptionWithSpace", {
-                sizeMb: result.freed_mb,
-              }),
-            });
-          }
-        } else if (modelType === "parakeet") {
-          const result = await window.electronAPI?.deleteParakeetModel(modelId);
-          if (result?.success) {
-            toast({
-              title: t("hooks.modelDownload.modelDeleted.title"),
-              description: t("hooks.modelDownload.modelDeleted.descriptionWithSpace", {
-                sizeMb: result.freed_mb,
-              }),
-            });
-          }
-        } else {
-          // model-delete reports failure by resolving, not throwing — leaving the
-          // model on disk, so the scopes pointing at it must stay untouched.
-          const result = await window.electronAPI?.modelDelete?.(modelId);
-          if (!result?.success) throw new Error(result?.error ?? "");
-          clearMissingLocalModelSelections((id) => id !== modelId);
-          toast({
-            title: t("hooks.modelDownload.modelDeleted.title"),
-            description: t("hooks.modelDownload.modelDeleted.description"),
-          });
-        }
+        // model-delete reports failure by resolving, not throwing — leaving the
+        // model on disk, so the scopes pointing at it must stay untouched.
+        const result = await window.electronAPI?.modelDelete?.(modelId);
+        if (!result?.success) throw new Error(result?.error ?? "");
+        clearMissingLocalModelSelections((id) => id !== modelId);
+        toast({
+          title: t("hooks.modelDownload.modelDeleted.title"),
+          description: t("hooks.modelDownload.modelDeleted.description"),
+        });
         notifyLocalModelsChanged();
         onComplete?.();
       } catch (error: unknown) {
@@ -451,7 +378,7 @@ export function useModelDownload({
         });
       }
     },
-    [modelType, showAlertDialog, t, toast]
+    [showAlertDialog, t, toast]
   );
 
   const cancelDownload = useCallback(
@@ -462,12 +389,7 @@ export function useModelDownload({
 
       setCancellingModels((current) => new Set(current).add(targetModel));
       try {
-        const result =
-          modelType === "whisper"
-            ? await window.electronAPI?.cancelWhisperDownload()
-            : modelType === "parakeet"
-              ? await window.electronAPI?.cancelParakeetDownload()
-              : await window.electronAPI?.modelCancelDownload?.(targetModel);
+        const result = await window.electronAPI?.modelCancelDownload?.(targetModel);
         if (result?.success) {
           toast({
             title: t("hooks.modelDownload.downloadCancelled.title"),
@@ -480,7 +402,7 @@ export function useModelDownload({
       }
       clearCancelling(targetModel);
     },
-    [cancellingModels, clearCancelling, downloads, modelType, t, toast]
+    [cancellingModels, clearCancelling, downloads, t, toast]
   );
 
   const downloadingModel = Object.keys(downloads)[0] || null;

@@ -8,12 +8,8 @@ const { isRestorablePasteTarget } = require("./windowsPasteTarget");
 const crypto = require("crypto");
 const debugLogger = require("./debugLogger");
 const { ANALYTICS_HISTORY_BACKFILL_VERSION } = require("./analytics");
-const { PARAKEET_UNSUPPORTED_OS_CODE } = require("./parakeetCapability");
-const { isSherpaLocalProvider } = require("./parakeetModelInfo");
 const { broadcastToWindows } = require("./windowBroadcast");
 const { openExternalUrl } = require("./externalUrlOpener");
-const { resolveFailedGpuBackends } = require("./whisper");
-const { WHISPER_GPU_FAILURE_REASON_KEYS } = require("./whisperGpuFailureReason");
 const { BYOK_API_KEYS } = require("../config/secretKeys");
 const chatgptAuth = require("./chatgptAuth");
 const chatgptResponsesSocket = require("./chatgptResponsesSocket");
@@ -86,19 +82,6 @@ function assertAnalyticsSyncContext(context) {
   }
   return context.accountId;
 }
-// Local engines resolve a failed decode instead of throwing. Retry turns that
-// into a coded error so the toast says what went wrong rather than blaming a
-// missing engine.
-function localTranscriptionFailure(result) {
-  const error = new Error(result.message || result.error || "Local transcription failed");
-  if (result.code === "NO_SPEECH_DETECTED" || result.message === "No audio detected") {
-    error.code = "NO_SPEECH_DETECTED";
-  } else if (result.error === "invalid_response") {
-    error.code = "INVALID_RESPONSE";
-    error.messageKey = "controlPanel.history.retryErrors.invalidResponse";
-  }
-  return error;
-}
 // Which diarization dialect a resolved endpoint speaks, for Custom endpoints
 // that front a known provider. Null when the host offers no known dialect.
 const diarizationHost = (endpoint) => {
@@ -134,17 +117,12 @@ const {
   DEFAULT_RETENTION_SETTINGS,
   createRetentionSettingsHandler,
 } = require("./retentionSettings");
-const { pcm16ToWav } = require("../utils/audioUtils");
 const postMigrationDetector = require("./postMigrationDetector");
 const screenContextCapture = require("./screenContextCapture");
 const { classifyToneAppCategory } = require("./toneAppCategories");
 const { UPLOAD_AUDIO_EXTENSIONS } = require("../constants/uploadAudioFormats.json");
 const { providerContentType, prepareProviderUpload } = require("./providerUploadAudio");
-const {
-  DEFAULT_WHISPER_VAD_CONFIG,
-  sanitizeWhisperVadConfig,
-  resolveContextSileroEnabled,
-} = require("./whisperVadConfig");
+const { DEFAULT_WHISPER_VAD_CONFIG, sanitizeWhisperVadConfig } = require("./whisperVadConfig");
 const {
   createServerTokenPoster,
   fetchRealtimeTokenForProvider,
@@ -236,7 +214,6 @@ async function dropUploadConnections(force = false) {
 const { formatTimestamp: formatDiarTime } = require("./speakerMerge");
 
 const { timestampRequestFields, mapVerboseSegments } = require("./uploadTimestamps");
-const { listLocalTranscriptionModels } = require("./localTranscriptionModels");
 
 // Canonicalize allowed dirs so realpath'd inputs match on macOS (/var -> /private/var).
 // Deliberately narrow: user-picked paths anywhere else are approved individually via
@@ -257,15 +234,6 @@ function getCanonicalAllowedAudioDirs() {
 // User-picked paths (OS file dialog, real drag-dropped files) may live outside the
 // static dirs (external volumes, /mnt, D:\) and are approved individually.
 const approvedAudioPaths = new Set();
-
-function approveAudioPath(filePath) {
-  if (typeof filePath !== "string" || !filePath) return;
-  try {
-    approvedAudioPaths.add(fs.realpathSync(path.resolve(filePath)));
-  } catch {
-    // File vanished or unreadable; nothing to approve.
-  }
-}
 
 // Returns the realpath'd file path if it lives under an allowed dir, else null.
 function resolveAllowedAudioPath(filePath) {
@@ -571,8 +539,6 @@ class IPCHandlers {
     this.environmentManager = managers.environmentManager;
     this.databaseManager = managers.databaseManager;
     this.clipboardManager = managers.clipboardManager;
-    this.whisperManager = managers.whisperManager;
-    this.parakeetManager = managers.parakeetManager;
     this.windowManager = managers.windowManager;
     this.updateManager = managers.updateManager;
     this.windowsKeyManager = managers.windowsKeyManager;
@@ -580,8 +546,6 @@ class IPCHandlers {
     this.textEditMonitor = managers.textEditMonitor;
     this.selectionManager = managers.selectionManager;
     this.getTrayManager = managers.getTrayManager;
-    this.whisperCudaManager = managers.whisperCudaManager;
-    this.whisperVulkanManager = managers.whisperVulkanManager;
     this.oauthProtocolRegistered = managers.oauthProtocolRegistered === true;
     this.oauthProtocol = managers.oauthProtocol || "openwhispr";
     this.sessionId = crypto.randomUUID();
@@ -640,10 +604,6 @@ class IPCHandlers {
     this.setupHandlers();
     // Lives for the app's lifetime; IPCHandlers has no teardown path.
     tokenStore.subscribe((state) => this._handleAuthTokenChange(state));
-
-    if (this.whisperManager?.serverManager) {
-      this._attachWhisperServerListeners(this.whisperManager.serverManager);
-    }
   }
 
   _handleAuthTokenChange({ generation, token }) {
@@ -774,26 +734,6 @@ class IPCHandlers {
     };
   }
 
-  _updateNativeModelDownloadStatus(modelType, modelId, progressData) {
-    if (progressData.type === "complete") {
-      return this.localModelDownloadStatus.finish(modelType, modelId);
-    }
-
-    if (progressData.type === "installing") {
-      return this.localModelDownloadStatus.update(modelType, modelId, {
-        phase: "installing",
-        progress: progressData.percentage || 100,
-      });
-    }
-
-    return this.localModelDownloadStatus.update(modelType, modelId, {
-      phase: "downloading",
-      progress: progressData.percentage || 0,
-      downloadedBytes: progressData.downloaded_bytes || 0,
-      totalBytes: progressData.total_bytes || 0,
-    });
-  }
-
   _setWhisperVadSettings(update = {}) {
     const ALLOWED_KEYS = new Set([
       "dictationSileroEnabled",
@@ -807,44 +747,6 @@ class IPCHandlers {
     }
     this.whisperVadSettings = { ...this._getWhisperVadSettings(), ...filtered };
     return this._getWhisperVadSettings();
-  }
-
-  // Shared by the upload IPC handler and the CLI bridge. `filePath` must
-  // already have passed resolveAllowedAudioPath (or approveAudioPath).
-  async transcribeLocalFile(filePath, options = {}) {
-    const audioBuffer = fs.readFileSync(filePath);
-    if (isSherpaLocalProvider(options.provider)) {
-      return this.parakeetManager.transcribeLocalParakeet(audioBuffer, options);
-    }
-    return this.whisperManager.transcribeLocalWhisper(audioBuffer, {
-      ...options,
-      ...this._resolveWhisperVadOptions("noteRecording"),
-    });
-  }
-
-  approveAudioPath(filePath) {
-    approveAudioPath(filePath);
-  }
-
-  listLocalTranscriptionModels() {
-    return listLocalTranscriptionModels({
-      whisperManager: this.whisperManager,
-      parakeetManager: this.parakeetManager,
-    });
-  }
-
-  _resolveWhisperVadOptions(context) {
-    const settings = this._getWhisperVadSettings();
-    const {
-      dictationSileroEnabled,
-      noteRecordingSileroEnabled,
-      meetingSileroEnabled,
-      ...vadConfig
-    } = settings;
-    return {
-      vadEnabled: resolveContextSileroEnabled(settings, context),
-      vadConfig,
-    };
   }
 
   _asyncMirrorWrite(note) {
@@ -1042,45 +944,6 @@ class IPCHandlers {
     }
   }
 
-  _whisperGpuFailedBackends() {
-    return resolveFailedGpuBackends(process.env.WHISPER_GPU_FAILED);
-  }
-
-  _attachWhisperServerListeners(serverManager) {
-    serverManager.on("cuda-fallback", ({ reason }) => {
-      this._recordWhisperGpuFailure("cuda", reason);
-      broadcastToWindows("cuda-fallback-notification", {});
-    });
-    serverManager.on("gpu-fallback", ({ reason }) => {
-      this._recordWhisperGpuFailure("vulkan", reason);
-      broadcastToWindows("gpu-fallback-notification", {});
-    });
-    // Persist the discrete-GPU pin so later launches spawn pinned directly
-    // instead of paying a second Vulkan cold start. See #1606.
-    serverManager.on("vulkan-device-pinned", ({ index }) => {
-      this._syncStartupEnv({ WHISPER_VULKAN_DEVICE: String(index) });
-    });
-    serverManager.on("vulkan-device-pin-cleared", () => {
-      this._syncStartupEnv({}, ["WHISPER_VULKAN_DEVICE"]);
-    });
-  }
-
-  // Remember the failed backend, and the error line that explains it, so the
-  // backend isn't re-attempted (and its model reload re-paid) on every launch
-  // and the settings card can say why (#1736). Cleared by retry, re-download,
-  // delete, and the once-per-upgrade reset. The reason is written in the same
-  // .env write as the flag. A failure with no readable reason clears the older
-  // one, so a stale cause is never shown.
-  _recordWhisperGpuFailure(backend, reason) {
-    const failed = this._whisperGpuFailedBackends();
-    if (!failed.includes(backend)) failed.push(backend);
-    const reasonKey = WHISPER_GPU_FAILURE_REASON_KEYS[backend];
-    this._syncStartupEnv(
-      { WHISPER_GPU_FAILED: failed.join(","), ...(reason ? { [reasonKey]: reason } : {}) },
-      reason ? [] : [reasonKey]
-    );
-  }
-
   // The control panel shows the GPU pack notice. An app started to the tray
   // creates none, so there the dictation panel shows it instead (#2554).
   _gpuPackNoticeWindow() {
@@ -1088,30 +951,6 @@ class IPCHandlers {
     if (controlPanelWindow && !controlPanelWindow.isDestroyed()) return controlPanelWindow;
     if (startedMinimized && mainWindow && !mainWindow.isDestroyed()) return mainWindow;
     return null;
-  }
-
-  // Captured before a handler stops the server to touch pack files (stopServer
-  // clears currentServerModel); tells _applyWhisperGpuPreference what to reload.
-  _whisperReloadModel() {
-    return this.whisperManager.serverManager.isRemote
-      ? null
-      : this.whisperManager.currentServerModel;
-  }
-
-  // Apply a GPU pack change to the loaded server without blocking the caller's
-  // IPC reply (a Vulkan cold start can take minutes); the renderer follows
-  // progress by polling whisper-server-status. Returns whether a reload was
-  // kicked off so the UI shows "activating" only when one is coming.
-  _applyWhisperGpuPreference(modelName) {
-    this.whisperManager.restartServerWithGpuPreference(modelName).catch((err) => {
-      debugLogger.error("whisper-server GPU preference restart failed", { error: err.message });
-    });
-    // Every pack download or delete and every Retry ends here, already saved.
-    // Tell every window, not just the caller's: Retry on the fallback pop-up
-    // runs in the dictation window, and Settings keeps up to three GPU cards
-    // mounted (#1736). A fallback is announced by its own notification.
-    broadcastToWindows("whisper-gpu-status-changed");
-    return !!modelName;
   }
 
   _syncStartupEnv(setVars, clearVars = []) {
@@ -1772,34 +1611,6 @@ class IPCHandlers {
       }
     });
 
-    // Sweep ow-url-*/ow-diarize-* orphans from crashes or windows closed mid-download.
-    require("./urlAudioDownloader").sweepStaleTempArtifacts();
-
-    ipcMain.handle("transcribe-audio-file", async (event, filePath, options = {}) => {
-      // Uploads pass a requestId so cancel-upload-transcription can abort the
-      // local decode; flows without one (voice drafts) register nothing.
-      const { signal, release } = this._uploadCancelRegistry.register(options.requestId);
-      try {
-        if (typeof filePath !== "string") {
-          return { success: false, error: "Invalid file path" };
-        }
-        const real = resolveAllowedAudioPath(filePath);
-        if (!real) return { success: false, error: "File path not allowed" };
-        return await this.transcribeLocalFile(real, { ...options, signal });
-      } catch (error) {
-        if (error?.name === "AbortError" || signal?.aborted) {
-          debugLogger.debug("Local audio file transcription cancelled", {
-            requestId: options.requestId,
-          });
-          return { success: false, error: "Cancelled", code: "UPLOAD_CANCELLED" };
-        }
-        debugLogger.error("Audio file transcription error", { error: error.message });
-        return { success: false, error: error.message };
-      } finally {
-        release();
-      }
-    });
-
     ipcMain.handle("capture-selected-text", async (event, options = {}) => {
       if (!this.selectionManager) {
         return { status: "unavailable", code: "selection_manager_unavailable" };
@@ -1985,272 +1796,11 @@ class IPCHandlers {
       return { success: true };
     });
 
-    ipcMain.handle("transcribe-local-whisper", async (_event, audioBlob, options = {}) => {
-      debugLogger.log("transcribe-local-whisper called", {
-        audioBlobType: typeof audioBlob,
-        audioBlobSize: audioBlob?.byteLength || audioBlob?.length || 0,
-        options,
-      });
-
-      try {
-        // skipVad: dictionary-echo rescue retries decode VAD-free, since VAD
-        // stripping the speech is what turned the transcript into prompt echo.
-        const { skipVad, ...requestOptions } = options;
-        const vadOptions = skipVad
-          ? { vadEnabled: false }
-          : this._resolveWhisperVadOptions("dictation");
-        const result = await this.whisperManager.transcribeLocalWhisper(audioBlob, {
-          ...requestOptions,
-          ...vadOptions,
-        });
-
-        debugLogger.log("Whisper result", {
-          success: result.success,
-          hasText: !!result.text,
-          message: result.message,
-          error: result.error,
-        });
-
-        return result;
-      } catch (error) {
-        debugLogger.error("Local Whisper transcription error", error);
-        const errorMessage = error.message || "Unknown error";
-
-        // Return specific error types for better user feedback
-        if (errorMessage.includes("FFmpeg not found")) {
-          return {
-            success: false,
-            error: "ffmpeg_not_found",
-            message: "FFmpeg is missing. Please reinstall the app or install FFmpeg manually.",
-          };
-        }
-        if (
-          errorMessage.includes("FFmpeg conversion failed") ||
-          errorMessage.includes("FFmpeg process error")
-        ) {
-          return {
-            success: false,
-            error: "ffmpeg_error",
-            message: "Audio conversion failed. The recording may be corrupted.",
-          };
-        }
-        if (
-          errorMessage.includes("whisper.cpp not found") ||
-          errorMessage.includes("whisper-cpp")
-        ) {
-          return {
-            success: false,
-            error: "whisper_not_found",
-            message: "Whisper binary is missing. Please reinstall the app.",
-          };
-        }
-        if (
-          errorMessage.includes("Audio buffer is empty") ||
-          errorMessage.includes("Audio data too small")
-        ) {
-          return {
-            success: false,
-            error: "no_audio_data",
-            message: "No audio detected",
-          };
-        }
-        if (errorMessage.includes("model") && errorMessage.includes("not downloaded")) {
-          return {
-            success: false,
-            error: "model_not_found",
-            message: errorMessage,
-          };
-        }
-
-        throw error;
-      }
-    });
-
-    ipcMain.handle("download-whisper-model", async (event, modelName) => {
-      const hadActiveDownload = this.localModelDownloadStatus.has("whisper", modelName);
-      this.localModelDownloadStatus.start("whisper", modelName);
-      try {
-        const result = await this.whisperManager.downloadWhisperModel(modelName, (progressData) => {
-          const status = this._updateNativeModelDownloadStatus("whisper", modelName, progressData);
-          this.windowManager.sendToControlPanel("whisper-download-progress", {
-            ...progressData,
-            sequence: status?.sequence,
-          });
-        });
-        const status = this.localModelDownloadStatus.has("whisper", modelName)
-          ? this.localModelDownloadStatus.finish("whisper", modelName)
-          : null;
-        if (status) {
-          this.windowManager.sendToControlPanel("whisper-download-progress", {
-            type: "complete",
-            model: modelName,
-            percentage: 100,
-            sequence: status.sequence,
-          });
-        }
-        return result;
-      } catch (error) {
-        const status = hadActiveDownload
-          ? null
-          : this.localModelDownloadStatus.finish("whisper", modelName);
-        if (!hadActiveDownload && error.code !== "DOWNLOAD_IN_PROGRESS") {
-          this.windowManager.sendToControlPanel("whisper-download-progress", {
-            type: "error",
-            model: modelName,
-            error: error.message,
-            code: error.code || "DOWNLOAD_FAILED",
-            sequence: status?.sequence,
-          });
-        }
-        return {
-          success: false,
-          error: error.message,
-          code: error.code || "DOWNLOAD_FAILED",
-        };
-      }
-    });
-
-    ipcMain.handle("list-whisper-models", async (event) => {
-      return this.whisperManager.listWhisperModels();
-    });
-
-    ipcMain.handle("delete-whisper-model", async (event, modelName) => {
-      return this.whisperManager.deleteWhisperModel(modelName);
-    });
-
-    ipcMain.handle("cancel-whisper-download", async (event) => {
-      return this.whisperManager.cancelDownload();
-    });
-
     // One-time "GPU pack needs re-downloading" notice recorded before any
     // window existed (#1606). Only the window that shows it can take it.
     ipcMain.handle("take-gpu-pack-migration-notice", (event) => {
       if (event.sender !== this._gpuPackNoticeWindow()?.webContents) return null;
       return require("./gpuPackMigrationNotice").take();
-    });
-
-    // Clears the remembered GPU failure and reloads the server with the GPU
-    // backend re-enabled (Retry on the "GPU could not be activated" state)
-    ipcMain.handle("whisper-gpu-retry", async () => {
-      this._syncStartupEnv({}, [
-        "WHISPER_GPU_FAILED",
-        ...Object.values(WHISPER_GPU_FAILURE_REASON_KEYS),
-      ]);
-      return {
-        success: true,
-        willRestart: this._applyWhisperGpuPreference(this._whisperReloadModel()),
-      };
-    });
-
-    ipcMain.handle("transcribe-local-parakeet", async (_event, audioBlob, options = {}) => {
-      debugLogger.log("transcribe-local-parakeet called", {
-        audioBlobType: typeof audioBlob,
-        audioBlobSize: audioBlob?.byteLength || audioBlob?.length || 0,
-        options,
-      });
-
-      try {
-        const result = await this.parakeetManager.transcribeLocalParakeet(audioBlob, options);
-
-        debugLogger.log("Parakeet result", {
-          success: result.success,
-          hasText: !!result.text,
-          message: result.message,
-          error: result.error,
-        });
-
-        return result;
-      } catch (error) {
-        debugLogger.error("Local Parakeet transcription error", error);
-        const errorMessage = error.message || "Unknown error";
-
-        if (errorMessage.includes("sherpa-onnx") && errorMessage.includes("not found")) {
-          return {
-            success: false,
-            error: "parakeet_not_found",
-            message: "Parakeet binary is missing. Please reinstall the app.",
-          };
-        }
-        if (errorMessage.includes("model") && errorMessage.includes("not downloaded")) {
-          return {
-            success: false,
-            error: "model_not_found",
-            message: errorMessage,
-          };
-        }
-        if (error.code === PARAKEET_UNSUPPORTED_OS_CODE) {
-          return {
-            success: false,
-            error: error.code,
-            message: errorMessage,
-          };
-        }
-
-        throw error;
-      }
-    });
-
-    ipcMain.handle("download-parakeet-model", async (event, modelName) => {
-      const hadActiveDownload = this.localModelDownloadStatus.has("parakeet", modelName);
-      this.localModelDownloadStatus.start("parakeet", modelName);
-      try {
-        const result = await this.parakeetManager.downloadParakeetModel(
-          modelName,
-          (progressData) => {
-            const status = this._updateNativeModelDownloadStatus(
-              "parakeet",
-              modelName,
-              progressData
-            );
-            this.windowManager.sendToControlPanel("parakeet-download-progress", {
-              ...progressData,
-              sequence: status?.sequence,
-            });
-          }
-        );
-        const status = this.localModelDownloadStatus.has("parakeet", modelName)
-          ? this.localModelDownloadStatus.finish("parakeet", modelName)
-          : null;
-        if (status) {
-          this.windowManager.sendToControlPanel("parakeet-download-progress", {
-            type: "complete",
-            model: modelName,
-            percentage: 100,
-            sequence: status.sequence,
-          });
-        }
-        return result;
-      } catch (error) {
-        const status = hadActiveDownload
-          ? null
-          : this.localModelDownloadStatus.finish("parakeet", modelName);
-        if (!hadActiveDownload && error.code !== "DOWNLOAD_IN_PROGRESS") {
-          this.windowManager.sendToControlPanel("parakeet-download-progress", {
-            type: "error",
-            model: modelName,
-            error: error.message,
-            code: error.code || "DOWNLOAD_FAILED",
-            sequence: status?.sequence,
-          });
-        }
-        return {
-          success: false,
-          error: error.message,
-          code: error.code || "DOWNLOAD_FAILED",
-        };
-      }
-    });
-
-    ipcMain.handle("list-parakeet-models", async () => {
-      return this.parakeetManager.listParakeetModels();
-    });
-
-    ipcMain.handle("delete-parakeet-model", async (_event, modelName) => {
-      return this.parakeetManager.deleteParakeetModel(modelName);
-    });
-
-    ipcMain.handle("cancel-parakeet-download", async () => {
-      return this.parakeetManager.cancelDownload();
     });
 
     ipcMain.handle("update-hotkey", async (event, hotkey) => {
@@ -3283,44 +2833,8 @@ class IPCHandlers {
       const setVars = {};
       const clearVars = [];
 
-      if (prefs.useLocalWhisper && prefs.model) {
-        // Local mode with model selected - set provider and model for pre-warming
-        setVars.LOCAL_TRANSCRIPTION_PROVIDER = prefs.localTranscriptionProvider;
-        if (prefs.language) setVars.DICTATION_LANGUAGE = prefs.language;
-        if (isSherpaLocalProvider(prefs.localTranscriptionProvider)) {
-          setVars.PARAKEET_MODEL = prefs.model;
-          clearVars.push("LOCAL_WHISPER_MODEL");
-          this.whisperManager.stopServer().catch((err) => {
-            debugLogger.error("Failed to stop whisper-server on provider switch", {
-              error: err.message,
-            });
-          });
-        } else {
-          setVars.LOCAL_WHISPER_MODEL = prefs.model;
-          clearVars.push("PARAKEET_MODEL");
-          this.parakeetManager.stopServer().catch((err) => {
-            debugLogger.error("Failed to stop parakeet-server on provider switch", {
-              error: err.message,
-            });
-          });
-        }
-      } else if (prefs.useLocalWhisper) {
-        // Local mode enabled but no model selected - clear pre-warming vars
-        clearVars.push("LOCAL_TRANSCRIPTION_PROVIDER", "PARAKEET_MODEL", "LOCAL_WHISPER_MODEL");
-      } else {
-        // Cloud mode - stop local servers to free RAM
-        clearVars.push("LOCAL_TRANSCRIPTION_PROVIDER", "PARAKEET_MODEL", "LOCAL_WHISPER_MODEL");
-        this.whisperManager.stopServer().catch((err) => {
-          debugLogger.error("Failed to stop whisper-server on cloud switch", {
-            error: err.message,
-          });
-        });
-        this.parakeetManager.stopServer().catch((err) => {
-          debugLogger.error("Failed to stop parakeet-server on cloud switch", {
-            error: err.message,
-          });
-        });
-      }
+      // Local transcription models are gone; clear what older builds saved.
+      clearVars.push("LOCAL_TRANSCRIPTION_PROVIDER", "PARAKEET_MODEL", "LOCAL_WHISPER_MODEL");
 
       // TODO: drop legacy REASONING_PROVIDER / LOCAL_REASONING_MODEL clears once
       // the read fallback is removed (~2 releases after this lands).
@@ -4385,26 +3899,6 @@ class IPCHandlers {
             source: "self-hosted",
             model: route.model,
           };
-        } else if (route.transport === "local") {
-          if (isSherpaLocalProvider(settings.localTranscriptionProvider)) {
-            const model =
-              (settings.localTranscriptionProvider === "cohere"
-                ? settings.cohereModel
-                : settings.parakeetModel) ||
-              process.env.PARAKEET_MODEL ||
-              "parakeet-tdt-0.6b-v3";
-            result = await this.parakeetManager.transcribeLocalParakeet(buffer, {
-              model,
-              language,
-            });
-          } else if (this.whisperManager?.serverManager?.isAvailable?.()) {
-            const vadOptions = this._resolveWhisperVadOptions("noteRecording");
-            result = await this.whisperManager.transcribeLocalWhisper(buffer, {
-              model: settings.whisperModel,
-              language,
-              ...vadOptions,
-            });
-          }
         } else if (settings?.cloudTranscriptionMode === "openwhispr") {
           const win = BrowserWindow.fromWebContents(event.sender);
           if (win) {
@@ -4593,9 +4087,6 @@ class IPCHandlers {
           result = { text: data?.text, source: provider, model: route.model };
         }
 
-        if (result?.success === false) {
-          throw localTranscriptionFailure(result);
-        }
         if (!result) {
           return { success: false, error: "No transcription engine available" };
         }
@@ -4676,21 +4167,7 @@ class IPCHandlers {
 
     const fs = require("fs");
 
-    let dictationPreviewMode = false;
-    let dictationPreviewBuffer = [];
-    let dictationPreviewTimer = null;
-    let dictationPreviewTranscribing = false;
-    let dictationPreviewProvider = null;
-    let dictationPreviewModel = null;
-    let dictationPreviewLanguage = null;
     let dictationPreviewSessionActive = false;
-    let dictationPreviewChunkCount = 0;
-    // Online-runtime models stream here instead of the 1.5s chunked path.
-    let dictationPreviewStream = null;
-    // false = headless streaming session (commit-only, no preview window).
-    let dictationPreviewDisplay = true;
-    // Bumped on every reset so async preview work can detect a stale session.
-    let dictationPreviewGen = 0;
     // Cloud partials can arrive faster than the preview window is created. Keep
     // preview updates, completion, and dismissal ordered so a late partial can
     // never overwrite the final result or reopen a dismissed window.
@@ -4703,100 +4180,6 @@ class IPCHandlers {
         () => undefined
       );
       return result;
-    };
-
-    const resetDictationPreviewState = ({ preserveSession = false } = {}) => {
-      dictationPreviewGen++;
-      if (dictationPreviewTimer) {
-        clearInterval(dictationPreviewTimer);
-        dictationPreviewTimer = null;
-      }
-      if (dictationPreviewStream) {
-        dictationPreviewStream.abort();
-        dictationPreviewStream = null;
-      }
-      dictationPreviewMode = false;
-      if (!preserveSession) {
-        dictationPreviewSessionActive = false;
-      }
-      dictationPreviewBuffer = [];
-      dictationPreviewTranscribing = false;
-      dictationPreviewProvider = null;
-      dictationPreviewModel = null;
-      dictationPreviewLanguage = null;
-      dictationPreviewDisplay = true;
-    };
-
-    const startDictationPreviewTimer = () => {
-      if (!dictationPreviewTimer) {
-        dictationPreviewTimer = setInterval(() => transcribeDictationPreviewChunk(), 1500);
-      }
-    };
-
-    const transcribeDictationPreviewChunk = async () => {
-      // The chunked path only feeds the preview window.
-      if (!dictationPreviewDisplay) return;
-      if (dictationPreviewTranscribing) return;
-      if (!dictationPreviewBuffer.length) return;
-
-      const gen = dictationPreviewGen;
-      const provider = dictationPreviewProvider;
-      const model = dictationPreviewModel;
-      const language = dictationPreviewLanguage;
-      dictationPreviewTranscribing = true;
-      try {
-        const pcm = Buffer.concat(dictationPreviewBuffer);
-        dictationPreviewBuffer = [];
-
-        const samples = new Int16Array(pcm.buffer, pcm.byteOffset, pcm.length / 2);
-        let sumSq = 0;
-        for (let i = 0; i < samples.length; i++) {
-          const n = samples[i] / 0x7fff;
-          sumSq += n * n;
-        }
-        const rms = Math.sqrt(sumSq / samples.length);
-        debugLogger.debug("Dictation preview chunk", {
-          pcmBytes: pcm.length,
-          rms: rms.toFixed(6),
-          samples: samples.length,
-        });
-        if (rms < 0.002) return;
-
-        const wav = pcm16ToWav(pcm);
-
-        let result;
-        if (isSherpaLocalProvider(provider)) {
-          result = await this.parakeetManager.transcribeLocalParakeet(wav, {
-            model,
-            language,
-          });
-        } else {
-          const vadOptions = this._resolveWhisperVadOptions("dictation");
-          result = await this.whisperManager.transcribeLocalWhisper(wav, {
-            model,
-            language,
-            ...vadOptions,
-          });
-        }
-
-        if (gen !== dictationPreviewGen) return;
-        if (result?.success && result.text?.trim()) {
-          this.windowManager.appendTranscriptionPreview(result.text.trim());
-        } else if (result && !result.success) {
-          debugLogger.warn("Dictation preview chunk returned failure", {
-            error: result.error || result.message,
-            provider,
-          });
-        }
-      } catch (error) {
-        if (gen !== dictationPreviewGen) return;
-        debugLogger.error("Dictation preview transcription chunk failed", {
-          error: error.message,
-          provider,
-        });
-      } finally {
-        if (gen === dictationPreviewGen) dictationPreviewTranscribing = false;
-      }
     };
 
     const setupDictationCallbacks = (streaming, event) => {
@@ -5107,91 +4490,9 @@ class IPCHandlers {
       return { success: true, ...result, text: result.text || "" };
     });
 
-    ipcMain.handle(
-      "start-dictation-preview",
-      async (_event, { provider, model, language, display = true }) => {
-        resetDictationPreviewState();
-        const gen = dictationPreviewGen;
-        dictationPreviewMode = true;
-        dictationPreviewSessionActive = true;
-        dictationPreviewProvider = provider;
-        dictationPreviewModel = model;
-        dictationPreviewLanguage = language || null;
-        dictationPreviewDisplay = display;
-        dictationPreviewChunkCount = 0;
-        if (display) this.windowManager.showTranscriptionPreview("");
-
-        if (provider === "nvidia" && this.parakeetManager.supportsOnlineStreaming(model)) {
-          try {
-            const stream = await this.parakeetManager.createOnlineStream(model, {
-              onUpdate: (text) => {
-                if (gen === dictationPreviewGen && text && dictationPreviewDisplay) {
-                  this.windowManager.showTranscriptionPreview(text);
-                }
-              },
-              onError: (error) => {
-                if (gen !== dictationPreviewGen || dictationPreviewStream !== stream) return;
-                // Keep the preview alive on the chunked path; the final
-                // transcript falls back to decoding the full recording.
-                debugLogger.warn("Online preview stream failed mid-session, falling back", {
-                  model,
-                  error: error.message,
-                });
-                dictationPreviewStream = null;
-                if (dictationPreviewDisplay) startDictationPreviewTimer();
-              },
-            });
-            if (gen !== dictationPreviewGen) {
-              stream.abort();
-              return { success: true };
-            }
-            dictationPreviewStream = stream;
-            for (const chunk of dictationPreviewBuffer) {
-              stream.sendPcm16(chunk);
-            }
-            dictationPreviewBuffer = [];
-            return { success: true };
-          } catch (error) {
-            debugLogger.warn("Online preview stream unavailable, falling back to chunked preview", {
-              model,
-              error: error.message,
-            });
-          }
-        }
-
-        if (gen !== dictationPreviewGen) return { success: true };
-        if (!display) {
-          // A headless session exists only to feed the online stream; without
-          // one, buffered PCM would just accumulate with no consumer.
-          resetDictationPreviewState();
-          return { success: true };
-        }
-        startDictationPreviewTimer();
-        return { success: true };
-      }
-    );
-
-    ipcMain.on("dictation-preview-audio", (_event, audioBuffer) => {
-      if (!dictationPreviewMode) return;
-      dictationPreviewChunkCount++;
-      if (dictationPreviewChunkCount <= 3 || dictationPreviewChunkCount % 50 === 0) {
-        debugLogger.debug("Dictation preview audio received", {
-          bytes: audioBuffer?.byteLength || audioBuffer?.length,
-          count: dictationPreviewChunkCount,
-          bufferSize: dictationPreviewBuffer.length,
-        });
-      }
-      const pcm = Buffer.isBuffer(audioBuffer) ? audioBuffer : Buffer.from(audioBuffer);
-      if (dictationPreviewStream) {
-        dictationPreviewStream.sendPcm16(pcm);
-        return;
-      }
-      dictationPreviewBuffer.push(pcm);
-    });
-
     ipcMain.handle("dismiss-dictation-preview", () =>
       queueDictationPreviewOperation(async () => {
-        resetDictationPreviewState();
+        dictationPreviewSessionActive = false;
         this.windowManager.hideTranscriptionPreview();
         return { success: true };
       })
@@ -5202,11 +4503,7 @@ class IPCHandlers {
         if (typeof text !== "string" || !text.trim()) {
           return { success: true };
         }
-        if (!dictationPreviewSessionActive) {
-          resetDictationPreviewState();
-          dictationPreviewSessionActive = true;
-          dictationPreviewDisplay = true;
-        }
+        dictationPreviewSessionActive = true;
         await this.windowManager.showTranscriptionPreview(text);
         return { success: true };
       })
@@ -5220,7 +4517,7 @@ class IPCHandlers {
         if (typeof text === "string" && text.trim()) {
           this.windowManager.completeTranscriptionPreview(text);
         } else {
-          resetDictationPreviewState();
+          dictationPreviewSessionActive = false;
           this.windowManager.hideTranscriptionPreview();
         }
         return { success: true };
@@ -5229,49 +4526,15 @@ class IPCHandlers {
 
     ipcMain.handle("hide-dictation-preview", () =>
       queueDictationPreviewOperation(async () => {
-        resetDictationPreviewState();
+        dictationPreviewSessionActive = false;
         this.windowManager.hideTranscriptionPreview();
         return { success: true };
       })
     );
 
     ipcMain.handle("stop-dictation-preview", async (_event, options = {}) => {
-      if (!dictationPreviewMode && !dictationPreviewSessionActive) {
-        return { success: true, streamed: false, text: "" };
-      }
-      clearInterval(dictationPreviewTimer);
-      dictationPreviewTimer = null;
-      const display = dictationPreviewDisplay;
-      // Missing flag defaults to trusted so non-streaming callers never regress.
-      const rendererFlushOk = options.flushed !== false;
-      let streamed = false;
-      let streamedText = "";
-      if (dictationPreviewStream) {
-        const stream = dictationPreviewStream;
-        dictationPreviewStream = null;
-        const gen = dictationPreviewGen;
-        const result = await stream.finish().catch(() => null);
-        if (gen !== dictationPreviewGen) {
-          return { success: true, streamed: false, text: "" };
-        }
-        if (result) {
-          streamedText = result.text || "";
-          // Trust the streamed transcript only on a clean server flush and a clean renderer flush.
-          streamed = !result.truncated && rendererFlushOk;
-        }
-        if (streamedText && display && dictationPreviewSessionActive) {
-          this.windowManager.showTranscriptionPreview(streamedText);
-        }
-      }
-      // Offline chunks only draw previews. The renderer decodes the full
-      // recording separately, so another preview decode here competes with
-      // final transcription without contributing to its result.
-      resetDictationPreviewState({ preserveSession: display });
-      if (!display || !dictationPreviewSessionActive) {
-        return { success: true, streamed, text: streamedText };
-      }
-      this.windowManager.holdTranscriptionPreview(options);
-      return { success: true, streamed, text: streamedText };
+      if (dictationPreviewSessionActive) this.windowManager.holdTranscriptionPreview(options);
+      return { success: true, streamed: false, text: "" };
     });
 
     ipcMain.handle("update-transcription-text", async (_event, id, text, rawText) => {

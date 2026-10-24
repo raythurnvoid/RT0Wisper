@@ -386,20 +386,6 @@ export interface WhisperModelResult {
   totalBytes?: number;
 }
 
-export interface WhisperModelDeleteResult {
-  success: boolean;
-  model: string;
-  deleted: boolean;
-  freed_mb?: number;
-  error?: string;
-}
-
-export interface WhisperModelsListResult {
-  success: boolean;
-  models: WhisperModelResult[];
-  cache_dir: string;
-}
-
 export interface ScreenRecordingAccessResult {
   granted: boolean;
   status: "granted" | "denied" | "not-determined" | "restricted" | "unknown" | "unsupported";
@@ -458,18 +444,6 @@ export interface AppVersionResult {
   version: string;
 }
 
-export interface WhisperDownloadProgressData {
-  type: "progress" | "installing" | "complete" | "error";
-  model: string;
-  percentage?: number;
-  downloaded_bytes?: number;
-  total_bytes?: number;
-  error?: string;
-  code?: string;
-  result?: any;
-  sequence?: number;
-}
-
 export interface LocalModelDownloadStatus {
   modelType: "whisper" | "parakeet" | "llm";
   modelId: string;
@@ -494,39 +468,6 @@ export interface ParakeetModelResult {
   downloadProgress?: number;
   downloadedBytes?: number;
   totalBytes?: number;
-}
-
-export interface ParakeetModelDeleteResult {
-  success: boolean;
-  model: string;
-  deleted: boolean;
-  freed_bytes?: number;
-  freed_mb?: number;
-  error?: string;
-}
-
-export interface ParakeetModelsListResult {
-  success: boolean;
-  models: ParakeetModelResult[];
-  cache_dir: string;
-}
-
-export interface ParakeetDownloadProgressData {
-  type: "progress" | "installing" | "complete" | "error";
-  model: string;
-  percentage?: number;
-  downloaded_bytes?: number;
-  total_bytes?: number;
-  error?: string;
-  code?: string;
-  sequence?: number;
-}
-
-export interface ParakeetTranscriptionResult {
-  success: boolean;
-  text?: string;
-  message?: string;
-  error?: string;
 }
 
 export interface PasteToolsResult {
@@ -917,17 +858,12 @@ declare global {
       retryTranscription: (
         id: number,
         settings?: {
-          useLocalWhisper: boolean;
-          localTranscriptionProvider: string;
           cloudTranscriptionMode: string;
           cloudTranscriptionProvider: string;
           cloudTranscriptionModel: string;
           cloudTranscriptionBaseUrl?: string;
           cortiEnvironment?: string;
           cortiTenant?: string;
-          parakeetModel: string;
-          cohereModel: string;
-          whisperModel: string;
           preferredLanguage?: string;
           transcriptionMode?: InferenceMode;
           remoteTranscriptionType?: SelfHostedType;
@@ -998,16 +934,6 @@ declare global {
         transcription?: TranscriptionItem;
         error?: string;
       }>;
-      transcribeAudioFile: (
-        filePath: string,
-        options?: {
-          provider?: LocalTranscriptionProvider;
-          model?: string;
-          language?: string;
-          requestId?: string;
-          [key: string]: unknown;
-        }
-      ) => Promise<{ success: boolean; text?: string; error?: string; code?: string }>;
 
       // Database event listeners
       onTranscriptionAdded?: (callback: (item: TranscriptionItem) => void) => () => void;
@@ -1043,47 +969,9 @@ declare global {
 
       // Audio
 
-      // Whisper operations (whisper.cpp)
-      transcribeLocalWhisper: (audioBlob: Blob | ArrayBuffer, options?: any) => Promise<any>;
-      downloadWhisperModel: (modelName: string) => Promise<WhisperModelResult>;
-      onWhisperDownloadProgress: (
-        callback: (event: any, data: WhisperDownloadProgressData) => void
-      ) => () => void;
-      listWhisperModels: () => Promise<WhisperModelsListResult>;
-      deleteWhisperModel: (modelName: string) => Promise<WhisperModelDeleteResult>;
-      cancelWhisperDownload: () => Promise<{
-        success: boolean;
-        message?: string;
-        error?: string;
-      }>;
-
-      whisperGpuRetry: () => Promise<{ success: boolean; willRestart: boolean }>;
-
-      onCudaFallbackNotification: (callback: () => void) => () => void;
-
-      onGpuFallbackNotification: (callback: () => void) => () => void;
-
       // One-time "GPU pack needs re-downloading" notice, taken by the window that shows it
       takeGpuPackMigrationNotice: () => Promise<{ packs: string[] } | null>;
       onGpuPackMigrationNoticeReady: (callback: () => void) => () => void;
-
-      // Parakeet operations (NVIDIA via sherpa-onnx)
-      transcribeLocalParakeet: (
-        audioBlob: ArrayBuffer,
-        options?: { model?: string; language?: string }
-      ) => Promise<ParakeetTranscriptionResult>;
-      downloadParakeetModel: (modelName: string) => Promise<ParakeetModelResult>;
-      onParakeetDownloadProgress: (
-        callback: (event: any, data: ParakeetDownloadProgressData) => void
-      ) => () => void;
-      listParakeetModels: () => Promise<ParakeetModelsListResult>;
-      deleteParakeetModel: (modelName: string) => Promise<ParakeetModelDeleteResult>;
-      cancelParakeetDownload: () => Promise<
-        {
-          success: boolean;
-          message?: string;
-        } & PolicyFailureMetadata
-      >;
 
       // Local AI model management
       modelGetAll: () => Promise<LocalLLMModelStatus[]>;
@@ -1943,12 +1831,6 @@ declare global {
       onPreviewHold?: (callback: (payload: { showCleanup: boolean }) => void) => () => void;
       onPreviewResult?: (callback: (payload: { text: string }) => void) => () => void;
       onPreviewHide?: (callback: () => void) => () => void;
-      startDictationPreview?: (opts: {
-        provider: string;
-        model: string;
-        language?: string;
-        display?: boolean;
-      }) => Promise<{ success: boolean }>;
       stopDictationPreview?: (opts?: {
         showCleanup?: boolean;
         flushed?: boolean;
@@ -1957,7 +1839,6 @@ declare global {
       updateDictationPreview?: (text: string) => Promise<{ success: boolean }>;
       completeDictationPreview?: (payload: { text?: string }) => Promise<{ success: boolean }>;
       hideDictationPreview?: () => Promise<{ success: boolean }>;
-      sendDictationPreviewAudio?: (data: ArrayBuffer) => void;
     };
 
     api?: {

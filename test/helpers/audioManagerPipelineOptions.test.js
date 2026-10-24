@@ -70,7 +70,6 @@ test("combined cleanup options honor every eligibility guard and use the actual 
     }
   );
   const blocked = [
-    { settings: { useLocalWhisper: true } },
     { settings: { cloudTranscriptionMode: "byok" } },
     { settings: { useCleanupModel: false } },
     { settings: { cleanupMode: "local" } },
@@ -195,7 +194,14 @@ async function loadTonedOrukeetStart(t, cachePrefix) {
     getKeyterms: () => [],
     onStateChange() {},
   });
-  return { window, manager, minted, sent, workletPort, classify: (app) => classifier.classify(app) };
+  return {
+    window,
+    manager,
+    minted,
+    sent,
+    workletPort,
+    classify: (app) => classifier.classify(app),
+  };
 }
 
 const tick = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
