@@ -4,7 +4,6 @@ const { appendFileSync, readFileSync } = require("node:fs");
 const sharedPaths = new Set([
   ".github/workflows/ci-changes.yml",
   ".github/workflows/codeql.yml",
-  ".github/dependabot.yml",
   ".gitattributes",
 ]);
 

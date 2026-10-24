@@ -79,10 +79,10 @@ Useful commands:
 2. Upload it as the latest release. Keep the asset name `RT0Wisper-Setup.exe`, so the download link above keeps working:
 
 ```bash
-cp "dist/RT0Wisper Setup 1.10.4.exe" dist/RT0Wisper-Setup.exe
-git tag rt0wisper-v1.10.4
-git push origin rt0wisper-v1.10.4
-gh release create rt0wisper-v1.10.4 dist/RT0Wisper-Setup.exe --repo raythurnvoid/RT0Wisper --verify-tag --title "RT0Wisper 1.10.4" --latest
+cp "dist/RT0Wisper Setup 0.1.0.exe" dist/RT0Wisper-Setup.exe
+git tag rt0wisper-v0.1.0
+git push origin rt0wisper-v0.1.0
+gh release create rt0wisper-v0.1.0 dist/RT0Wisper-Setup.exe --repo raythurnvoid/RT0Wisper --verify-tag --title "RT0Wisper 0.1.0" --latest
 ```
 
 Change the version and the tag to match `package.json`. Keep `--repo`: this clone also has the OpenWhispr `upstream` remote, and without `--repo` the GitHub CLI may pick that repo.

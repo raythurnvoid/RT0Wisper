@@ -6,6 +6,14 @@ This document provides comprehensive technical details about the OpenWhispr proj
 
 Keep responses focused, brief, and concise. Keep disclaimers and caveats short, and spend most of the response on the main answer. When asked to explain something, give a high-level summary unless an in-depth explanation is specifically requested.
 
+## Development process
+
+- Change the code, commit straight to `main`, and push (`git push origin main`). Never push to `upstream` (OpenWhispr).
+- No feature branches and no pull requests.
+- No commit message format. Write a short, simple message.
+- No release or version steps. Build only when the user asks: `pnpm run build:win`.
+- Use pnpm only (never npm, npx or bun). Run Node tools through Vite Plus: `vp env exec pnpm ...`.
+
 ## Project Overview
 
 OpenWhispr is an Electron-based desktop dictation application that uses whisper.cpp for speech-to-text transcription. It supports both local (privacy-focused) and cloud (OpenAI API) processing modes.
@@ -20,7 +28,7 @@ OpenWhispr is an Electron-based desktop dictation application that uses whisper.
 - **UI Components**: shadcn/ui with Radix primitives
 - **Speech Processing**: whisper.cpp + NVIDIA Parakeet (via sherpa-onnx) + OpenAI API
 - **Audio Processing**: FFmpeg (bundled via ffmpeg-static)
-- **Node.js**: 24 (pinned in `.nvmrc` — CI uses Node 24, do NOT regenerate `package-lock.json` with a different major version)
+- **Node.js**: 24 (pinned in `.nvmrc`, run through Vite Plus)
 
 ### Key Architectural Decisions
 
@@ -577,7 +585,6 @@ Native Windows support for true push-to-talk functionality using low-level keybo
 
 - Compiled from source by `scripts/build-windows-key-listener.js`, part of `compile:native`, so every `prebuild*`, `predev:main` and `prestart` chain on a Windows host builds it; neither script runs on other hosts
 - Fallback: prebuilt binary from GitHub releases (`windows-key-listener-v*` tags) via `scripts/download-windows-key-listener.js`
-- Release CI (`release.yml`, `build-and-notarize.yml`) compiles it with MSVC during `build:win`
 - CI workflow: `.github/workflows/build-windows-key-listener.yml` rebuilds the prebuilt binary when `resources/windows-key-listener.c` changes on main
 - `afterPack.js` fails a Windows package without the binary. A dev run without it starts with Hold unavailable (a saved Hold is reset to Tap at startup), modifier-only hotkeys refused, and `F8` as the default hotkey (`hotkeyManager.js`)
 
@@ -919,7 +926,6 @@ UI icons come from `src/components/icons/` (vendored Nucleo core outline compone
    - Run `npm run download:whisper-cpp` before packaging (current platform)
    - Use `npm run download:whisper-cpp:all` for multi-platform packaging
    - afterSign.js automatically skips signing when CSC_IDENTITY_AUTO_DISCOVERY=false
-   - **Lockfile**: Always use Node 24 when running `npm install` (matches CI). If your local Node version differs, use `nvm exec 24 npm install`. Running `npm install` with a different major version will produce an incompatible `package-lock.json` that breaks `npm ci` in CI.
 
 5. **Windows Push-to-Talk Binary**:
    - Compiled from `resources/windows-key-listener.c` whenever `compile:native` runs on a Windows host (`prebuild:win`, `predev:main`, …); the prebuilt binary download from GitHub releases is the fallback
@@ -967,7 +973,7 @@ UI icons come from `src/components/icons/` (vendored Nucleo core outline compone
   - `resources/nsis/installer.nsh` removes the `Run` and `StartupApproved\Run` values on uninstall (but not on update), which Electron itself never cleans up
 - **Tray identity**: signed production builds pass a permanent GUID to `new Tray()` (`tray.js`) so Windows keeps the user's tray placement across updates. Never change the GUID
   - Windows binds an unsigned executable's GUID to its path, so the GUID is gated on the `windowsTrayIdentity` marker that `electron-builder.json` injects through `extraMetadata`
-  - `electron-builder.json` forces Windows code signing; unsigned Windows builds (PR CI, local) must use `electron-builder.unsigned-win.json`, which clears the marker. Never run the `win-unpacked` a failed signed build leaves behind: it carries the marker and may be unsigned
+  - `electron-builder.json` forces Windows code signing; unsigned Windows builds (local) must use `electron-builder.unsigned-win.json`, which clears the marker. Never run the `win-unpacked` a failed signed build leaves behind: it carries the marker and may be unsigned
 - **Push-to-Talk**: Native key listener binary (`windows-key-listener.exe`) enables true push-to-talk
   - Uses Windows Low-Level Keyboard Hook (`WH_KEYBOARD_LL`)
   - Supports compound hotkeys (e.g., `Ctrl+Shift+F11`)

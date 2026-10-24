@@ -34,7 +34,6 @@ test("shared CI configuration selects both", () => {
     ".github/workflows/ci-changes.yml",
     ".github/workflows/codeql.yml",
     ".github/scripts/ci-scope.cjs",
-    ".github/dependabot.yml",
     ".gitattributes",
   ]) {
     assert.deepEqual(classifyPaths([path]), { desktop: true, mobile: true, build: true });
