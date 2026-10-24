@@ -1475,9 +1475,9 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   meetingProcessDetection: readBoolean("meetingProcessDetection", true),
   speakerDiarizationEnabled: readBoolean("speakerDiarizationEnabled", true),
   panelStartPosition: (() => {
-    const v = readString("panelStartPosition", "bottom-right");
+    const v = readString("panelStartPosition", "center");
     if (v === "bottom-right" || v === "center" || v === "bottom-left") return v;
-    return "bottom-right" as const;
+    return "center" as const;
   })(),
   showTranscriptionPreview: readBoolean("showTranscriptionPreview", false),
   autoPasteEnabled: readBoolean("autoPasteEnabled", true),

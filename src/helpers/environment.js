@@ -453,7 +453,8 @@ class EnvironmentManager {
   getPanelStartPosition() {
     const v = this._getKey("PANEL_START_POSITION");
     if (v === "bottom-right" || v === "center" || v === "bottom-left") return v;
-    return "bottom-right";
+    // RT0Wisper docks the pill at the bottom center by default.
+    return "center";
   }
 
   savePanelStartPosition(position) {

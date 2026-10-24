@@ -41,8 +41,11 @@ interface VoicePillProps extends Omit<HTMLAttributes<HTMLDivElement>, "children"
   dictationStatus?: DictationPillStatus | null;
 }
 
-// Mini waveform for the dictation status pill.
-const DICTATION_WAVE_BAR_COUNT = 7;
+// Mini waveform for the dictation status pill. "Voxtral is listening" is
+// short, so the live wave gets more bars to fill the space after it; the
+// longer processing label leaves room for the 7-bar ripple only.
+const DICTATION_LISTENING_BAR_COUNT = 15;
+const DICTATION_RIPPLE_BAR_COUNT = 7;
 const DICTATION_WAVE_MAX_PX = 14;
 
 // Sized from WAVEFORM_BAR_COUNT so a bar-count change can never silently
@@ -169,8 +172,8 @@ export const VoicePill = forwardRef<HTMLDivElement, VoicePillProps>(function Voi
           )}
           <span
             className={cn(
-              "relative min-w-0 flex-1 truncate text-[10.5px] leading-none",
-              dictationStatus.phase === "processing" && "inline-response-shimmer"
+              "relative min-w-0 truncate text-[10.5px] leading-none",
+              dictationStatus.phase === "processing" && "inline-response-shimmer flex-1"
             )}
           >
             <span className="font-semibold">{dictationStatus.model}</span>{" "}
@@ -180,14 +183,14 @@ export const VoicePill = forwardRef<HTMLDivElement, VoicePillProps>(function Voi
             <PillWaveform
               getLevel={getAudioLevel}
               active={isRecording}
-              barCount={DICTATION_WAVE_BAR_COUNT}
+              barCount={DICTATION_LISTENING_BAR_COUNT}
               maxBarPx={DICTATION_WAVE_MAX_PX}
-              className="relative h-4 shrink-0 gap-0.5"
+              className="relative h-4 min-w-0 flex-1 gap-0.5"
             />
           ) : (
             // A soft ripple says the model is working, in the waveform's spot.
             <span className="relative flex h-4 shrink-0 items-center gap-0.5" aria-hidden="true">
-              {Array.from({ length: DICTATION_WAVE_BAR_COUNT }, (_, index) => (
+              {Array.from({ length: DICTATION_RIPPLE_BAR_COUNT }, (_, index) => (
                 <span
                   key={index}
                   className="dictation-pill-ripple-bar h-2.5 w-0.5 rounded-full bg-current"
