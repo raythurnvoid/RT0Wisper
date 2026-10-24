@@ -205,7 +205,6 @@ class IPCHandlers {
     this.databaseManager = managers.databaseManager;
     this.clipboardManager = managers.clipboardManager;
     this.windowManager = managers.windowManager;
-    this.updateManager = managers.updateManager;
     this.windowsKeyManager = managers.windowsKeyManager;
     this.linuxKeyManager = managers.linuxKeyManager;
     this.textEditMonitor = managers.textEditMonitor;
@@ -3895,19 +3894,12 @@ class IPCHandlers {
 
     ipcMain.handle("clear-error-log", () => debugLogger.clearErrorLog());
 
-    ipcMain.handle("get-app-version", async () => {
-      return this.updateManager.getAppVersion();
-    });
+    ipcMain.handle("get-app-version", () => ({ version: app.getVersion() }));
 
     ipcMain.handle("get-oauth-protocol", () => this.oauthProtocol);
 
     ipcMain.handle("mark-bundle-migrated", () => {
       postMigrationDetector.markBundleMigrated();
-    });
-
-    ipcMain.handle("set-auto-updates-enabled", async (_event, enabled) => {
-      this.updateManager.setAutoUpdatesEnabled(enabled === true);
-      return { success: true };
     });
 
     // Agent mode handlers

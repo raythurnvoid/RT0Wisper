@@ -1101,7 +1101,6 @@ declare global {
       getAppVersion: () => Promise<AppVersionResult>;
       getOAuthProtocol: () => Promise<string>;
       markBundleMigrated: () => Promise<void>;
-      setAutoUpdatesEnabled: (enabled: boolean) => Promise<{ success: boolean }>;
 
       openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
 
