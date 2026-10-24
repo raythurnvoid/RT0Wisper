@@ -11,6 +11,12 @@
 
 ---
 
+## Install (Windows)
+
+1. Download **[RT0Wisper-Setup.exe](https://github.com/raythurnvoid/RT0Wisper/releases/latest/download/RT0Wisper-Setup.exe)** from the [latest release](https://github.com/raythurnvoid/RT0Wisper/releases/latest).
+2. Run it. The installer is not signed, so Windows may show "Windows protected your PC". Click **More info**, then **Run anyway**.
+3. Open RT0Wisper and follow the setup screen (see [Setup](#setup)).
+
 ## How it works
 
 1. Hold the hotkey (Right Ctrl by default) and speak.
@@ -37,16 +43,49 @@ There are no other providers or models to choose.
 - Voxtral Mini Transcribe 3: about $0.0035 per minute of audio.
 - Luna cleanup: included in your ChatGPT plan.
 
-## Run from source
+## Develop on a new computer
 
-Needs Node.js 24 and pnpm.
+You need:
+
+- [Git](https://git-scm.com/)
+- [Node.js 24](https://nodejs.org/) (any Node version manager works)
+- [pnpm](https://pnpm.io/installation)
+
+Then:
 
 ```bash
+git clone https://github.com/raythurnvoid/RT0Wisper.git
+cd RT0Wisper
 pnpm install
 pnpm dev
 ```
 
-You can also set `MISTRAL_API_KEY` in your environment before you start the app.
+`pnpm dev` starts the app with hot reload. The first run also downloads small native helpers (hotkey listener, paste helper), so it needs internet.
+
+Quit the installed RT0Wisper first, so the two copies don't both react to the hotkey. If the dev app shows the setup screen, add the Mistral key and sign in with ChatGPT again.
+
+Useful commands:
+
+| Command                | What it does                                 |
+| ---------------------- | -------------------------------------------- |
+| `pnpm test`            | Runs the tests.                              |
+| `pnpm run build:win`   | Builds the installer into `dist/`.           |
+| `pnpm run build:mac`   | Builds the macOS app (run it on a Mac).      |
+| `pnpm run build:linux` | Builds the Linux packages (run it on Linux). |
+
+## Publish a new installer
+
+1. Build it: `pnpm run build:win`.
+2. Upload it as the latest release. Keep the asset name `RT0Wisper-Setup.exe`, so the download link above keeps working:
+
+```bash
+cp "dist/RT0Wisper Setup 1.10.4.exe" dist/RT0Wisper-Setup.exe
+git tag rt0wisper-v1.10.4
+git push origin rt0wisper-v1.10.4
+gh release create rt0wisper-v1.10.4 dist/RT0Wisper-Setup.exe --repo raythurnvoid/RT0Wisper --verify-tag --title "RT0Wisper 1.10.4" --latest
+```
+
+Change the version and the tag to match `package.json`. Keep `--repo`: this clone also has the OpenWhispr `upstream` remote, and without `--repo` the GitHub CLI may pick that repo.
 
 ## Voice assistant
 
