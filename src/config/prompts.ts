@@ -7,7 +7,6 @@ import {
   describeUnavailable,
   type UnavailableCapability,
 } from "./agentCapabilities";
-import { NOTE_TAKER_LABEL } from "../utils/transcriptEvidence";
 
 export {
   resolvePrompt,
@@ -112,14 +111,6 @@ const TOOL_GROUPS: Record<string, string> = {
 const CAPABILITY_RULE =
   "Use a tool when the request needs what it provides, rather than guessing from memory; don't call one when the conversation or the context provided here already has the answer. Never tell the user you can't do something one of these tools covers (for example, never say you can't browse the web when web search is listed). If a tool call fails, say that it failed rather than claiming you lack the ability.";
 
-const OPEN_NOTE_RULE =
-  "The user is asking from inside the note below. When they ask about what was said, decided or written, answer from this note, and if it doesn't cover the question, say so.";
-const OPEN_NOTE_TRANSCRIPT_RULE = `Its transcript is too long to include, so only its start is shown (transcript_preview). Before saying the note doesn't cover something, look for it with get_note (transcript_query, or transcript_offset from 0), and never claim to have read the whole transcript from the preview. get_note labels the lines of the person taking the notes "${NOTE_TAKER_LABEL}".`;
-// Overrides search_notes' "search before answering" line: in a note's chat,
-// answers from other notes read as the chat leaking past its note (#2551).
-const OPEN_NOTE_SEARCH_RULE =
-  'In this chat, this rule overrides the search_notes guidance above: use search_notes only when the user asks you to look beyond this note (for example "check my other notes" or "did this come up in another meeting"), and name the note your answer comes from. When this note doesn\'t cover a question, offer to search their other notes rather than searching them yourself.';
-
 const TOOL_TRACE_RULE =
   "Earlier assistant messages may begin with a [Tools used: …] note that the app added to record the tools you called in that turn and how each action turned out. An action marked sent or draft opened already happened: never do it again unless the user asks, and use its reference or link when you need it. One that may have been sent must not be retried. When the user answers your question or asks you to retry, do only what is still outstanding. Never write such a note yourself.";
 
@@ -165,10 +156,6 @@ export interface AgentSystemPromptOptions {
   unavailable?: ReadonlyArray<UnavailableCapability>;
   /** History carries [Tools used: …] notes on earlier assistant turns. */
   toolTrace?: boolean;
-  /** The note a note's chat was opened from (with its attendees), answered from before any other note. */
-  openNote?: string;
-  /** The open note carries only the start of its transcript, which get_note reads further. */
-  openNoteTranscriptPreview?: boolean;
   /** The signed-in user's name, so drafts are signed with it instead of a placeholder. */
   userName?: string | null;
   /** Tone & Style: the user's tones, and the kind of app a pasted answer lands in. */
@@ -226,11 +213,6 @@ export function getAgentSystemPrompt(
       "\n\n" + buildWritingStyleBlock(options.writingStyle.tones, options.writingStyle.destination);
   }
   prompt += "\n\n" + SOURCE_FIDELITY_RULE;
-
-  if (options.openNote) {
-    const canSearch = tools.some((tool) => tool.name === "search_notes");
-    prompt += `\n\n${OPEN_NOTE_RULE}${options.openNoteTranscriptPreview ? ` ${OPEN_NOTE_TRANSCRIPT_RULE}` : ""}${canSearch ? ` ${OPEN_NOTE_SEARCH_RULE}` : ""}\n\n${options.openNote}`;
-  }
 
   if (noteContext) {
     prompt +=

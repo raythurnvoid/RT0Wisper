@@ -24,19 +24,9 @@ export interface FileTranscriptionResult {
   // Set alongside `warning` by the chunked cloud path: how much audio was lost.
   failedChunks?: number;
   totalChunks?: number;
-  // Measured duration of the source audio, for persisting as
-  // audio_duration_seconds. Only transcribeFileWithSpeakers sets it.
-  durationSeconds?: number | null;
   // Segment-level timing from BYOK providers that support it (opts.timestamps
   // or BYOK diarization). Absent whenever the provider returned text only.
   segments?: Array<{ text: string; start: number; end: number; speaker?: string }>;
-}
-
-export interface DiarizationSettings {
-  enabled: boolean;
-  // Local sherpa-onnx models present; BYOK-native diarization doesn't need them.
-  localModelsReady: boolean;
-  numSpeakers: number | null;
 }
 
 export interface FileTranscriptionConfig {
@@ -197,97 +187,4 @@ export async function transcribeFile(
     remoteTranscriptionUrl: cfg.remoteTranscriptionUrl,
     remoteTranscriptionModel: cfg.remoteTranscriptionModel,
   });
-}
-
-// OpenAI/Mistral BYOK handle diarization inside the transcription call itself.
-// Self-hosted mode routes to the user's own server, which doesn't — those users
-// get local diarization like everyone else.
-export function shouldUseByokDiarize(
-  cfg: FileTranscriptionConfig,
-  diarizationEnabled: boolean
-): boolean {
-  if (isManagedTranscriptionActive()) return false;
-  return (
-    diarizationEnabled &&
-    !cfg.useLocalWhisper &&
-    !cfg.isOpenWhisprCloud &&
-    cfg.transcriptionMode !== "self-hosted" &&
-    (cfg.cloudTranscriptionProvider === "openai" || cfg.cloudTranscriptionProvider === "mistral")
-  );
-}
-
-interface DiarizationSettingsRequest {
-  enabled: boolean;
-  modelsReady: boolean;
-  numSpeakers: number | null;
-  config: FileTranscriptionConfig;
-  ensureModels: () => Promise<boolean>;
-}
-
-// Speaker detection is opt-in but its local models download lazily, so a run
-// started before they land would report "couldn't be applied" without the
-// diarizer ever being invoked. Fetch them first; only the routes that diarize
-// server-side can skip the download.
-export async function resolveDiarizationSettings({
-  enabled,
-  modelsReady,
-  numSpeakers,
-  config,
-  ensureModels,
-}: DiarizationSettingsRequest): Promise<DiarizationSettings> {
-  const needsLocalModels = enabled && !modelsReady && !shouldUseByokDiarize(config, enabled);
-  return {
-    enabled,
-    localModelsReady: needsLocalModels ? await ensureModels() : modelsReady,
-    numSpeakers,
-  };
-}
-
-// Transcribe and diarize in parallel, then merge speaker labels into the text.
-// Shared by the single-file flow and the batch queue. `durationSeconds` (when the
-// source knows it, e.g. URL downloads) beats inferring duration from segments.
-export async function transcribeFileWithSpeakers(
-  filePath: string,
-  cfg: FileTranscriptionConfig,
-  diarization: DiarizationSettings,
-  durationSeconds?: number | null,
-  opts: { requestId?: string; timestamps?: boolean } = {}
-): Promise<FileTranscriptionResult> {
-  const byokDiarize = shouldUseByokDiarize(cfg, diarization.enabled);
-  const diarizePromise =
-    diarization.enabled && diarization.localModelsReady && !byokDiarize
-      ? (window.electronAPI
-          .diarizeAudioFile?.(filePath, {
-            numSpeakers: diarization.numSpeakers ?? undefined,
-            requestId: opts.requestId,
-          })
-          .catch(() => null) ?? Promise.resolve(null))
-      : Promise.resolve(null);
-
-  const [transcribed, diar] = await Promise.all([
-    transcribeFile(filePath, cfg, byokDiarize, opts),
-    diarizePromise,
-  ]);
-
-  // The diarizer measures the converted audio, so it covers picked files whose
-  // duration the caller never knew. 0/NaN mean "unknown", hence ||.
-  const measuredDuration = durationSeconds || (diar?.success && diar.durationSeconds) || null;
-  const result = { ...transcribed, durationSeconds: measuredDuration };
-
-  if (!result.success || !result.text || !diarization.enabled || result.diarized) return result;
-  if (!diar?.success || !diar.segments?.length) {
-    return { ...result, diarizationWarning: true };
-  }
-
-  try {
-    const merged = await window.electronAPI.mergeSpeakerText?.(
-      diar.segments,
-      result.text,
-      durationSeconds || 0
-    );
-    if (merged?.success && merged.text) return { ...result, text: merged.text };
-  } catch {
-    // Merge failure falls back to the plain transcript.
-  }
-  return { ...result, diarizationWarning: true };
 }

@@ -11,7 +11,6 @@ const assert = require("node:assert/strict");
 
 const loadRouting = () => import("../../src/helpers/dictationStreamingRouting.js");
 const loadTokens = () => import("../../src/helpers/realtimeTokenProviders.js");
-const loadMeeting = () => import("../../src/helpers/meetingStreamingProviders.js");
 
 // Keys of audioManager's STREAMING_PROVIDERS channel-binding table. audioManager
 // imports window APIs so it can't load under node:test; this list is the
@@ -359,19 +358,6 @@ test("closure: shared-channel dictation providers have token entries under their
       typeof REALTIME_TOKEN_PROVIDERS[provider],
       "function",
       `${provider} reaches fetchRealtimeToken but has no token entry`
-    );
-  }
-});
-
-test("closure: every allowed meeting provider has a token entry", async () => {
-  const { REALTIME_TOKEN_PROVIDERS } = await loadTokens();
-  const { ALLOWED_MEETING_PROVIDERS } = await loadMeeting();
-  for (const provider of ALLOWED_MEETING_PROVIDERS) {
-    if (provider === "local") continue;
-    assert.equal(
-      typeof REALTIME_TOKEN_PROVIDERS[provider],
-      "function",
-      `${provider} is meeting-allowed but has no token entry`
     );
   }
 });

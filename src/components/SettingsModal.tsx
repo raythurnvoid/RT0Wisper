@@ -1,51 +1,39 @@
 import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { usePolicyStore } from "../stores/policyStore";
-import { Sliders, Mic, Brain, Wrench, Keyboard, Shield, ShieldCheck, SquareSparkle } from "./icons";
+import { Sliders, Mic, Brain, Keyboard, SquareSparkle } from "./icons";
 import SidebarModal, { type SidebarItem } from "./ui/SidebarModal";
-import SettingsPage, { AccountAvatar, SettingsSectionType } from "./SettingsPage";
-import { useAuth } from "../hooks/useAuth";
+import SettingsPage, { SettingsSectionType } from "./SettingsPage";
 
 export type { SettingsSectionType };
 
-// The old AI Models sidebar had four items (transcription, meetings,
-// intelligence, agentMode) — they now collapse into two: speechToText + llms.
-// Legacy deep-links land on the matching sub-tab via LEGACY_SUB_TAB.
-// "dictationAgent" (the Home GPU banner) and "noteFormatting" (a note action's
-// error toast) are live deep-links, not legacy aliases.
+// Older section IDs still arrive from deep links (toasts, banners); each one
+// opens the section that now holds its settings.
 const SECTION_ALIASES: Record<string, SettingsSectionType> = {
   aiModels: "llms",
   agentConfig: "llms",
   agentMode: "llms",
   dictationAgent: "llms",
   intelligence: "llms",
-  meetings: "llms",
-  noteFormatting: "llms",
   prompts: "llms",
   transcription: "speechToText",
-  uploadTranscription: "speechToText",
-  softwareUpdates: "system",
-  privacy: "privacyData",
-  permissions: "privacyData",
-  developer: "system",
-  // The account screens are gone, so links to them open Preferences.
-  account: "general",
-  plansBilling: "general",
-  workspace: "general",
 };
 
 const LEGACY_SUB_TAB: Record<string, string> = {
-  transcription: "dictation",
-  uploadTranscription: "upload",
   dictationAgent: "dictationAgent",
-  meetings: "noteFormatting",
-  noteFormatting: "noteFormatting",
   intelligence: "dictationCleanup",
   agentMode: "chatIntelligence",
   agentConfig: "chatIntelligence",
   aiModels: "dictationCleanup",
   prompts: "dictationCleanup",
 };
+
+const SECTION_IDS: SettingsSectionType[] = [
+  "general",
+  "hotkeys",
+  "toneStyle",
+  "speechToText",
+  "llms",
+];
 
 interface SettingsModalProps {
   open: boolean;
@@ -55,12 +43,8 @@ interface SettingsModalProps {
 
 export default function SettingsModal({ open, onOpenChange, initialSection }: SettingsModalProps) {
   const { t } = useTranslation();
-  const { isSignedIn, user } = useAuth();
-  const policyManaged = usePolicyStore((s) => s.managed);
-  const sidebarItems: SidebarItem<SettingsSectionType>[] = useMemo(() => {
-    // No Account group: Profile, Plans & Billing and Workspace are OpenWhispr Cloud
-    // screens, and RT0Wisper uses no OpenWhispr account.
-    const items: SidebarItem<SettingsSectionType>[] = [
+  const sidebarItems: SidebarItem<SettingsSectionType>[] = useMemo(
+    () => [
       {
         id: "general",
         label: t("settingsModal.sections.general.label"),
@@ -96,27 +80,16 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         description: t("settingsModal.sections.llms.description"),
         group: t("settingsModal.groups.aiModels"),
       },
-      {
-        id: "privacyData",
-        label: t("settingsModal.sections.privacyData.label"),
-        icon: Shield,
-        description: t("settingsModal.sections.privacyData.description"),
-        group: t("settingsModal.groups.system"),
-      },
-      {
-        id: "system",
-        label: t("settingsModal.sections.system.label"),
-        icon: Wrench,
-        description: t("settingsModal.sections.system.description"),
-        group: t("settingsModal.groups.system"),
-      },
-    ];
-    return items;
-  }, [t]);
+    ],
+    [t]
+  );
 
+  // Removed sections (account, privacy, system, ...) fall back to General.
   const resolveSection = (section: string | undefined): SettingsSectionType => {
-    if (!section) return "general";
-    return (SECTION_ALIASES[section] ?? section) as SettingsSectionType;
+    const resolved = section ? (SECTION_ALIASES[section] ?? section) : "general";
+    return SECTION_IDS.includes(resolved as SettingsSectionType)
+      ? (resolved as SettingsSectionType)
+      : "general";
   };
 
   const [activeSection, setActiveSection] = React.useState<SettingsSectionType>(() =>
@@ -149,30 +122,6 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
       sidebarItems={sidebarItems}
       activeSection={activeSection}
       onSectionChange={handleSectionChange}
-      header={
-        isSignedIn && user ? (
-          <div className="flex flex-col items-center gap-2 pb-2 text-center">
-            <AccountAvatar image={user.image} name={user.name || t("settingsPage.account.user")} />
-            <div className="min-w-0 w-full">
-              <p dir="auto" className="text-[13px] font-semibold text-foreground truncate">
-                {user.name || t("settingsPage.account.user")}
-              </p>
-              <p className="text-xs text-muted-foreground truncate">
-                <bdi dir="ltr">{user.email}</bdi>
-              </p>
-            </div>
-          </div>
-        ) : undefined
-      }
-      notice={
-        policyManaged
-          ? {
-              icon: <ShieldCheck className="h-3.5 w-3.5 shrink-0" />,
-              label: t("settingsModal.managedAccount"),
-              description: t("settingsModal.managedByOrg"),
-            }
-          : undefined
-      }
     >
       <SettingsPage
         activeSection={activeSection}

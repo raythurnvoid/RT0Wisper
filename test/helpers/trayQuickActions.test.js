@@ -21,32 +21,22 @@ function createTrayManager(calls, { dictating = false } = {}) {
     sendStartDictation: () => calls.push("start-dictation"),
     sendStopDictation: () => calls.push("stop-dictation"),
     sendOpenAssistantPanel: () => calls.push("assistant"),
-    startManualMeeting: () => calls.push("meeting"),
   };
   return trayManager;
 }
 
 test("the tray menu leads with the dictation pill's quick actions", () => {
   const calls = [];
-  const [listen, assistant, meeting, separator] =
-    createTrayManager(calls).buildContextMenuTemplate();
+  const [listen, assistant, separator] = createTrayManager(calls).buildContextMenuTemplate();
 
   assert.deepEqual(
-    [listen.label, assistant.label, meeting.label, separator.type],
-    [
-      "app.commandMenu.startListening",
-      "app.commandMenu.askAssistant",
-      "app.commandMenu.startMeetingRecording",
-      "separator",
-    ]
+    [listen.label, assistant.label, separator.type],
+    ["app.commandMenu.startListening", "app.commandMenu.askAssistant", "separator"]
   );
 
   listen.click();
   assistant.click();
-  meeting.click();
-  // Listening and a meeting start in the main process; only the assistant needs
-  // the renderer, which is the one that can open its panel.
-  assert.deepEqual(calls, ["start-dictation", "assistant", "meeting"]);
+  assert.deepEqual(calls, ["start-dictation", "assistant"]);
 });
 
 test("the tray's listen item stops the recording it reflects", () => {

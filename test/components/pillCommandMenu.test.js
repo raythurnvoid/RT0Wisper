@@ -63,9 +63,3 @@ test("the command menu anchors on the pill's docked side", async (t) => {
     assert.ok(!classes.includes("end-0") && !classes.includes("start-0"));
   }
 });
-
-test("the command menu offers a meeting recording only while idle and allowed", async (t) => {
-  assert.match(await renderMenu(t, {}), /startMeetingRecording/);
-  assert.doesNotMatch(await renderMenu(t, { isRecording: true }), /startMeetingRecording/);
-  assert.doesNotMatch(await renderMenu(t, { meetingAllowed: false }), /startMeetingRecording/);
-});

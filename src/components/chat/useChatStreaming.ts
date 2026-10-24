@@ -6,38 +6,18 @@ import { providerSupportsImages } from "../../services/ai/inferenceProviders";
 import { getSettings, useSettingsStore } from "../../stores/settingsStore";
 import { resolveChatStreamingInference } from "../../helpers/dictationAgentInference.js";
 import { describeProviderError } from "../../utils/describeProviderError";
-import { productHelpMetadata } from "../../services/help/productHelp";
 import logger from "../../utils/logger";
-import {
-  isAgentAllowed,
-  isConnectorsAllowed,
-  isConnectorsBlockedByOrg,
-  isLlmSelectionAllowed,
-  isWebSearchAllowed,
-  isWebSearchBlockedByOrg,
-} from "../../stores/policyRules";
+import { isAgentAllowed, isLlmSelectionAllowed } from "../../stores/policyRules";
 import { usePolicyStore } from "../../stores/policyStore";
 import { useAuth } from "../../hooks/useAuth";
-import { getUsageState } from "../../lib/usageStore";
-import { readIsSubscribed } from "../../lib/subscriptionFlag";
-import { hasConnectorPlan } from "../../utils/connectorEligibility";
-import { gmailSendStatus, resolveEmailDraftTarget } from "../../utils/emailDraftTarget";
-import {
-  ensureConnectorStatus,
-  readyConnectorIds,
-  useConnectorStatusStore,
-} from "../../stores/connectorStatusStore";
 import {
   appendDictionarySuffix,
   appendPlainTextResponseSuffix,
   appendScreenContextSuffix,
   getAgentSystemPrompt,
 } from "../../config/prompts";
-import { resolveUnavailableCapabilities } from "../../config/agentCapabilities";
 import type { ToneAppCategory } from "../../config/toneStyle";
 import { getDictionaryHintWords } from "../../utils/snippets";
-import { noteAttendeesContext, withoutAttendeesFence } from "../../utils/noteAttendees";
-import { FULL_TRANSCRIPT_MAX_TOKENS } from "../../utils/transcriptEvidence";
 import { createToolRegistry } from "../../services/tools";
 import {
   executeTool,
@@ -45,19 +25,14 @@ import {
   type ToolRegistry,
 } from "../../services/tools/ToolRegistry";
 import { createToolExecutionScope, type ToolExecutionScope } from "./toolExecutionScope";
-import { isQueryResultData } from "../../services/tools/connectors/runQueryAction";
 import { getAgentToolActivityRemainingMs } from "../../helpers/agentToolPresentation";
 import type { Message, AgentState, ChatImageAttachment, ToolCallInfo } from "./types";
 import { toHistoryMessages, withoutEchoedToolTrace, type HistoryMessage } from "./historyMessages";
-import type { ContainerScope } from "../../types/chat";
-import type { NoteAttendeesRequest } from "../../types/connectors";
 import {
   buildAgentRequestText,
   type AgentSelectionContext,
 } from "../../utils/agentSelectionContext";
 
-const RAG_NOTE_LIMIT = 5;
-const RAG_NOTE_SNIPPET_LENGTH = 500;
 const STREAM_FLUSH_INTERVAL_MS = 32;
 
 const LOCAL_TOOL_MIN_PARAMS_B = 4;
@@ -65,48 +40,6 @@ const LOCAL_TOOL_MIN_PARAMS_B = 4;
 function estimateModelSizeB(modelId: string): number {
   const match = modelId.match(/-([\d.]+)[bB]/);
   return match ? parseFloat(match[1]) : 0;
-}
-
-// Main adds the note's identified speakers and its calendar event's
-// organizer (calendars often leave them out of the attendees), then drops
-// the user (their OpenWhispr address included) and rooms with find_contact's
-// rules; a failed lookup just leaves the block out.
-async function buildNoteAttendeesContext(
-  meeting: NoteAttendeesRequest | undefined
-): Promise<string> {
-  if (!meeting || !window.electronAPI?.connectorNoteAttendees) return "";
-  try {
-    const result = await window.electronAPI.connectorNoteAttendees(meeting);
-    return noteAttendeesContext(result?.attendees ?? []);
-  } catch {
-    return "";
-  }
-}
-
-async function buildRAGContext(userText: string, scope?: ContainerScope): Promise<string> {
-  if (!window.electronAPI?.semanticSearchNotes) return "";
-  try {
-    const results = await window.electronAPI.semanticSearchNotes(
-      userText,
-      RAG_NOTE_LIMIT,
-      scope?.spaceId ?? null,
-      scope?.folderId ?? null
-    );
-    if (!results || results.length === 0) return "";
-
-    const snippets = await Promise.all(
-      results.map(async (r: { id: number; title: string; score?: number }) => {
-        const note = await window.electronAPI.getNote(r.id);
-        if (!note) return null;
-        const content = (note.content || "").slice(0, RAG_NOTE_SNIPPET_LENGTH);
-        return `<note id="${note.id}" title="${note.title}">\n${content}\n</note>`;
-      })
-    );
-
-    return snippets.filter(Boolean).join("\n\n");
-  } catch {
-    return "";
-  }
 }
 
 /**
@@ -117,44 +50,11 @@ async function buildRAGContext(userText: string, scope?: ContainerScope): Promis
  */
 export type ChatStreamingScope = "chatIntelligence" | "dictationAgent";
 
-export interface OpenNoteContext {
-  text: string;
-  /** Only the start of the transcript is included; get_note reads the rest. */
-  transcriptPreview: boolean;
-}
-
 interface UseChatStreamingOptions {
   messages: Message[];
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   /** Settings scope the conversation resolves its provider and model from. */
   inferenceScope?: ChatStreamingScope;
-  /** Notes listed in the system prompt as possibly relevant (container overview chat). */
-  noteContext?: string;
-  /**
-   * The note a note's chat is about. The model answers from it first, and no
-   * other notes are added up front: it reaches them through search_notes.
-   */
-  openNote?: string | ((maxTranscriptTokens: number) => OpenNoteContext);
-  /** Optional container scope applied to RAG and the search_notes tool (container overview chat). */
-  searchScope?: ContainerScope;
-  /**
-   * Offer connector tools (email drafts, contact lookup) when the plan and
-   * policy allow them. Off unless a surface opts in: they act outside the app.
-   */
-  allowConnectors?: boolean;
-  /**
-   * Name capabilities that exist but aren't usable here, and how to turn them
-   * on. Off only where the request already says what to do without them (the
-   * onboarding demo answers with suggested times instead).
-   */
-  nameUnavailableCapabilities?: boolean;
-  /** Disable product-help tools on guided surfaces such as the onboarding demo. */
-  productHelpEnabled?: boolean;
-  /**
-   * The note's meeting (note chat). Its attendees are listed for the model
-   * only in a send that offers connector tools, so recipients come from them.
-   */
-  noteMeeting?: NoteAttendeesRequest;
   onStreamComplete?: (assistantId: string, content: string, toolCalls?: ToolCallInfo[]) => void;
   /** Fires exactly once when displayable assistant content or tool activity becomes available. */
   onResponseContent?: () => void;
@@ -170,8 +70,6 @@ export interface SendToAIOptions {
    * chat shows and saves (a note action shows its name while its prompt is sent).
    */
   requestText?: string;
-  /** This turn isn't offered update_note, so it can't change a note (a note's chat action). */
-  keepNotesUnchanged?: boolean;
   /** Keeps a caret-destined voice response in the compact pill while it streams. */
   suppressResponseContent?: boolean;
   /** Asks the model for plain prose because the answer will be pasted into a plain-text app. */
@@ -216,13 +114,6 @@ export function useChatStreaming({
   messages,
   setMessages,
   inferenceScope = "chatIntelligence",
-  noteContext: externalNoteContext,
-  openNote,
-  searchScope,
-  allowConnectors = false,
-  nameUnavailableCapabilities = true,
-  productHelpEnabled = true,
-  noteMeeting,
   onStreamComplete,
   onResponseContent,
 }: UseChatStreamingOptions): ChatStreaming {
@@ -232,14 +123,6 @@ export function useChatStreaming({
   const [activeToolName, setActiveToolName] = useState("");
   const mountedRef = useRef(true);
   const messagesRef = useRef<Message[]>([]);
-  const noteContextRef = useRef(externalNoteContext);
-  noteContextRef.current = externalNoteContext;
-  const openNoteRef = useRef(openNote);
-  openNoteRef.current = openNote;
-  const searchScopeRef = useRef(searchScope);
-  searchScopeRef.current = searchScope;
-  const noteMeetingRef = useRef(noteMeeting);
-  noteMeetingRef.current = noteMeeting;
   // Only an account bound to this session: after a switch, drafts must not
   // be signed with the previous account's name.
   const { user } = useAuth();
@@ -415,46 +298,14 @@ export function useChatStreaming({
           isLocalProvider && estimateModelSizeB(llmConfig.model) >= LOCAL_TOOL_MIN_PARAMS_B;
         const supportsTools = isCloudAgent || !isLocalProvider || localModelCanUseTool;
 
-        const scope = searchScopeRef.current;
-        const policy = usePolicyStore.getState();
-        // The calendar tool reads the shared provider-deduped events table,
-        // so any connected provider enables it.
-        const calendarConnected =
-          settings.gcalConnected || settings.mcalConnected || settings.appleCalendarConnected;
-        const webSearchEnabled = isWebSearchAllowed(policy);
-        const connectorPlan = hasConnectorPlan(getUsageState(), readIsSubscribed());
         let registry: ToolRegistry | null = null;
-        let connectorsOffered = false;
         if (supportsTools) {
-          const scopeKey = scope ? `${scope.spaceId}:${scope.folderId ?? ""}` : "";
-          const connectorsAvailable =
-            allowConnectors && settings.isSignedIn && connectorPlan && isConnectorsAllowed(policy);
-          // The first send in a window must not miss a connector that is already connected.
-          if (connectorsAvailable) await ensureConnectorStatus();
-          const connectors = connectorsAvailable
-            ? {
-                emailDraftTarget: resolveEmailDraftTarget({
-                  ...settings,
-                  gmailStatus: gmailSendStatus(useConnectorStatusStore.getState().statuses.gmail),
-                }),
-                readyConnectorIds: readyConnectorIds(),
-              }
-            : undefined;
-          connectorsOffered = connectors !== undefined;
           // Triggers ride in the tool description, so a snippet edit rebuilds the registry.
-          const snippetKey = settings.snippets.map((s) => s.trigger).join("|");
-          const keepNotesUnchanged = !!options?.keepNotesUnchanged;
-          const cacheKey = `${settings.isSignedIn}-${calendarConnected}-${settings.cloudBackupEnabled}-${scopeKey}-${webSearchEnabled}-${productHelpEnabled}-${snippetKey}-${connectors?.emailDraftTarget ?? "no-connectors"}-${connectors?.readyConnectorIds.join(",") ?? ""}-${keepNotesUnchanged}`;
+          const cacheKey = settings.snippets.map((s) => s.trigger).join("|");
           if (toolRegistryRef.current?.key === cacheKey) {
             registry = toolRegistryRef.current.registry;
           } else {
             registry = createToolRegistry({
-              isSignedIn: settings.isSignedIn,
-              calendarConnected,
-              cloudBackupEnabled: settings.cloudBackupEnabled,
-              searchScope: scope,
-              webSearchEnabled,
-              productHelpEnabled,
               vocabulary: {
                 getDictionary: () => getSettings().customDictionary,
                 updateDictionary: (changes) =>
@@ -462,75 +313,16 @@ export function useChatStreaming({
                 getSnippets: () => getSettings().snippets,
                 setSnippets: (snippets) => useSettingsStore.getState().setSnippets(snippets),
               },
-              connectors,
-              keepNotesUnchanged,
             });
             toolRegistryRef.current = { key: cacheKey, registry };
           }
         }
 
-        // Named in the prompt so the model says how to turn a capability on
-        // instead of claiming it can't; built per send, outside the registry cache.
-        const unavailable = resolveUnavailableCapabilities({
-          supportsTools,
-          isSignedIn: settings.isSignedIn,
-          webSearch: { allowed: webSearchEnabled, blockedByOrg: isWebSearchBlockedByOrg(policy) },
-          calendarConnected,
-          connectors: allowConnectors
-            ? {
-                hasPlan: connectorPlan,
-                allowed: isConnectorsAllowed(policy),
-                blockedByOrg: isConnectorsBlockedByOrg(policy),
-                statuses: useConnectorStatusStore.getState().statuses,
-              }
-            : undefined,
-          locations: {
-            account: `${t("sidebar.settings")} → ${t("settingsModal.sections.account.label")}`,
-            plans: `${t("sidebar.settings")} → ${t("settingsModal.sections.plansBilling.label")}`,
-            calendars: `${t("sidebar.integrations")} → ${t("integrations.nav.sections.calendars")}`,
-            connectors: `${t("sidebar.integrations")} → ${t("integrations.nav.sections.connectors")}`,
-            models: `${t("sidebar.settings")} → ${t("settingsModal.sections.llms.label")}`,
-          },
-        });
-
-        // A note's chat is about its note: other notes up front would compete with
-        // it, and search_notes still reaches them when it doesn't answer.
-        const [ragContext, attendeesContext] = await Promise.all([
-          openNoteRef.current ? "" : buildRAGContext(userText, scope),
-          connectorsOffered ? buildNoteAttendeesContext(noteMeetingRef.current) : "",
-        ]);
-        if (cancelled() || !mountedRef.current) return;
-        // A transcript too long for the model is read through get_note, except
-        // by whole-note actions, which work from the complete source.
-        const maxTranscriptTokens =
-          registry?.get("get_note") && !options?.requestText
-            ? FULL_TRANSCRIPT_MAX_TOKENS[
-                !isCloudAgent && (isLocalProvider || isLanAgent) ? "selfHosted" : "hosted"
-              ]
-            : Infinity;
-        const currentNote: OpenNoteContext =
-          typeof openNoteRef.current === "function"
-            ? openNoteRef.current(maxTranscriptTokens)
-            : { text: openNoteRef.current ?? "", transcriptPreview: false };
-        // Only main's attendee block may carry its fence: note text and search
-        // results can't fake a second list.
-        const openNoteContext = [withoutAttendeesFence(currentNote.text), attendeesContext]
-          .filter(Boolean)
-          .join("\n\n");
-        const libraryContext = [
-          withoutAttendeesFence(noteContextRef.current ?? ""),
-          withoutAttendeesFence(ragContext),
-        ]
-          .filter(Boolean)
-          .join("\n\n");
         // The user's dictionary rides on every conversation so replies use their
         // jargon — same suffix the dictation prompts carry.
         let systemPrompt = appendDictionarySuffix(
-          getAgentSystemPrompt(registry?.getAll(), libraryContext || undefined, {
-            unavailable: nameUnavailableCapabilities ? unavailable : [],
+          getAgentSystemPrompt(registry?.getAll(), undefined, {
             toolTrace: registry !== null,
-            openNote: openNoteContext || undefined,
-            openNoteTranscriptPreview: currentNote.transcriptPreview,
             userName: userNameRef.current,
             writingStyle: settings.toneStyleEnabled
               ? { tones: settings.toneStyles, destination: options?.destinationAppCategory }
@@ -754,13 +546,7 @@ export function useChatStreaming({
                                 ...tc,
                                 status: "completed" as const,
                                 result: toolDisplayTexts.get(chunk.callId) ?? chunk.displayText,
-                                ...(chunk.metadata && !isQueryResultData(chunk.metadata)
-                                  ? {
-                                      metadata:
-                                        productHelpMetadata(tc.name, chunk.metadata) ??
-                                        chunk.metadata,
-                                    }
-                                  : {}),
+                                ...(chunk.metadata ? { metadata: chunk.metadata } : {}),
                               }
                             : tc
                         ),
@@ -872,9 +658,6 @@ export function useChatStreaming({
     },
     [
       inferenceScope,
-      allowConnectors,
-      nameUnavailableCapabilities,
-      productHelpEnabled,
       t,
       setMessages,
       onStreamComplete,

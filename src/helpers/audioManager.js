@@ -625,17 +625,14 @@ class AudioManager {
     this.cachedApiKeyProvider = null;
     this._micWarmedAt = 0;
     this._startInProgress = false;
-    this._micOpenReported = false;
     this.preparedMicCapture = new PreparedMicCapture({
       dispose: (prepared) => this._disposePrepared(prepared),
-      onActiveChange: () => this._syncMicOpenGate(),
     });
     const micSettings = getSettings();
     this._micHoldSeconds = Number(micSettings.micWarmHoldSeconds) || 0;
     this._micDeviceKey = micDeviceKey(micSettings);
     this.micStreamHold = new MicStreamHold({
       holdSeconds: this._micHoldSeconds,
-      onHoldChange: () => this._syncMicOpenGate(),
       isBusy: () =>
         this.isRecording ||
         this.isStreaming ||
@@ -1352,17 +1349,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
   cancelPreparedMicCapture() {
     this.preparedMicCapture.cancel();
-  }
-
-  // Tells the main process whether this renderer is holding the mic open outside
-  // a recording — an idle hold or a prepared capture. Recordings are gated by
-  // setUserRecording instead. Without this the device-global macOS/Linux mic
-  // signal reports our own capture as a meeting.
-  _syncMicOpenGate() {
-    const open = this.micStreamHold.active || this.preparedMicCapture.active;
-    if (open === this._micOpenReported) return;
-    this._micOpenReported = open;
-    window.electronAPI?.micWarmHoldChanged?.(open);
   }
 
   _disposePrepared(prepared) {

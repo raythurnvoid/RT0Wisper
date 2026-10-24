@@ -124,21 +124,6 @@ test("unavailable capabilities sit after the tools and before the note context",
   assert.ok(tools !== -1 && tools < unavailable && unavailable < note);
 });
 
-test("a note's chat answers from its note and searches other notes only when asked", async () => {
-  const { getAgentSystemPrompt } = await load();
-  const prompt = getAgentSystemPrompt(["search_notes"], undefined, { openNote: "Note ID: 7" });
-  assert.match(
-    prompt,
-    /answer from this note, and if it doesn't cover the question, say so\.[^]*search_notes only when the user asks you to look beyond this note[^]*name the note[^]*offer to search their other notes[^]*\n\nNote ID: 7$/
-  );
-  assert.doesNotMatch(prompt, /notes from the user's library/);
-
-  // Without search_notes there's nothing to look in.
-  const withoutTools = getAgentSystemPrompt([], undefined, { openNote: "Note ID: 7" });
-  assert.match(withoutTools, /say so\.\n\nNote ID: 7$/);
-  assert.doesNotMatch(withoutTools, /search_notes/);
-});
-
 test("emails and messages are signed with the user's name, never a placeholder", async () => {
   const { getAgentSystemPrompt } = await load();
   const prompt = getAgentSystemPrompt(["search_notes"], undefined, { userName: "Chad Piha" });

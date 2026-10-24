@@ -60,46 +60,8 @@ test("account ownership operations forward the account and credential generation
   const { api, invocations } = loadPreloadApi();
 
   await api.setActiveAccountScope("account-a", 7);
-  await api.deleteAccountData("account-a", 7, { erasingDevice: true });
 
-  assert.deepEqual(invocations, [
-    ["set-active-account-scope", "account-a", 7],
-    // Erasing the device also revokes a Gmail grant shared with a calendar.
-    ["delete-account-data", "account-a", 7, { erasingDevice: true }],
-  ]);
-});
-
-test("meeting stop forwards the optional expected recording session ID", async () => {
-  const { api, invocations } = loadPreloadApi();
-
-  await api.meetingTranscriptionStop("meeting-2");
-
-  assert.deepEqual(invocations, [["meeting-transcription-stop", "meeting-2"]]);
-});
-
-test("meeting system-audio availability forwards the scoped session", async () => {
-  const { api, invocations } = loadPreloadApi();
-
-  await api.meetingTranscriptionSetSystemAudioAvailable("meeting-2", true);
-
-  assert.deepEqual(invocations, [
-    ["meeting-transcription-set-system-audio-available", "meeting-2", true],
-  ]);
-});
-
-test("meeting auto-end listener strips the event and can unsubscribe", () => {
-  const { api, listeners } = loadPreloadApi();
-  const payload = { sessionId: "meeting-2" };
-  let received;
-  const unsubscribe = api.onMeetingAutoEndRequested((request) => {
-    received = request;
-  });
-
-  listeners.get("meeting-auto-end-requested")?.({ sender: "ipc" }, payload);
-
-  assert.equal(received, payload);
-  unsubscribe();
-  assert.equal(listeners.has("meeting-auto-end-requested"), false);
+  assert.deepEqual(invocations, [["set-active-account-scope", "account-a", 7]]);
 });
 
 test("assistant busy state is forwarded to the main-process hotkey guard", async () => {

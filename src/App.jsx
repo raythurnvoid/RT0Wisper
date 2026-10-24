@@ -17,7 +17,6 @@ import { useWindowResizeCompensation } from "./hooks/useWindowResizeCompensation
 import { useSettingsStore } from "./stores/settingsStore";
 import { isAgentAllowed } from "./stores/policyRules";
 import { usePolicyStore } from "./stores/policyStore";
-import { useTranscriptionContextAllowed } from "./hooks/usePolicy";
 import { useTrayQuickActions } from "./hooks/useTrayQuickActions";
 import { VoicePill } from "./components/dictation/VoicePill";
 import { AssistantPanel } from "./components/dictation/AssistantPanel";
@@ -26,7 +25,6 @@ import { VoiceModePanelCore } from "./components/dictation/VoiceModePanelCore";
 import { PillTooltip } from "./components/dictation/PillTooltip";
 import { PillCommandMenu } from "./components/dictation/PillCommandMenu";
 import { LiquidCancelButton } from "./components/dictation/LiquidCancelButton";
-import AssistantNoteUndoListener from "./components/notes/AssistantNoteUndoListener";
 import { createMainWindowResizeCoordinator } from "./utils/mainWindowResizeCoordinator";
 import {
   ASSISTANT_FOOTER_TRANSITION_TIMING,
@@ -120,8 +118,7 @@ export default function App() {
   useMainProcessNotifications({ toast, dismiss, t });
 
   const agentAllowed = usePolicyStore(isAgentAllowed);
-  const meetingAllowed = useTranscriptionContextAllowed("meeting");
-  // Both allowances fail closed while the policy is loading or its fetch failed,
+  // The agent allowance fails closed while the policy is loading or its fetch failed,
   // so the tray's refusals need to tell those apart from a real org restriction.
   const policyStatus = usePolicyStore((state) => state.status);
   const policyResolved =
@@ -769,7 +766,6 @@ export default function App() {
               align={voicePillPopoverAlign}
               isRecording={isRecording}
               agentAllowed={agentAllowed}
-              meetingAllowed={meetingAllowed}
               isHovered={isHovered}
               setWindowInteractivity={setWindowInteractivity}
               onToggleListening={() => {
@@ -778,10 +774,6 @@ export default function App() {
               onAskAssistant={() => {
                 setIsCommandMenuOpen(false);
                 void openAssistantPanel();
-              }}
-              onStartMeeting={() => {
-                setIsCommandMenuOpen(false);
-                void window.electronAPI?.startManualMeeting?.();
               }}
               onHide={() => {
                 setIsCommandMenuOpen(false);
@@ -844,8 +836,6 @@ export default function App() {
           />
         )}
       </VoiceModePanelCore>
-      {/* The assistant panel edits notes here; its Undo shows once the panel has focus. */}
-      <AssistantNoteUndoListener />
     </div>
   );
 }

@@ -23,17 +23,3 @@ test("a settings panel draws no backdrop blur on any platform", async (t) => {
 
   assert.doesNotMatch(html, /backdrop-blur/);
 });
-
-test("the language picker's trigger draws no backdrop blur on any platform", async (t) => {
-  const mod = await loadModule(t, "/components/ui/LanguageSelector.tsx", "darwin");
-  const html = renderToStaticMarkup(
-    createElement(mod.default, {
-      value: "en",
-      onChange: () => {},
-      options: [{ value: "en", label: "English", flag: "🇺🇸" }],
-    })
-  );
-
-  assert.match(html, /English/);
-  assert.doesNotMatch(html, /backdrop-blur/);
-});

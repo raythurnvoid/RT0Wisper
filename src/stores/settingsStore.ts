@@ -2489,12 +2489,10 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setGcalPrimaryOnly: (value: boolean) => {
     if (isBrowser) localStorage.setItem("gcalPrimaryOnly", String(value));
     useSettingsStore.setState({ gcalPrimaryOnly: value });
-    if (isBrowser) window.electronAPI?.gcalSetPrimaryOnly?.(value);
   },
   setMcalPrimaryOnly: (value: boolean) => {
     if (isBrowser) localStorage.setItem("mcalPrimaryOnly", String(value));
     useSettingsStore.setState({ mcalPrimaryOnly: value });
-    if (isBrowser) window.electronAPI?.mcalSetPrimaryOnly?.(value);
   },
   setAppleCalendarConnected: createBooleanSetter("appleCalendarConnected"),
   setMeetingProcessDetection: createBooleanSetter("meetingProcessDetection"),
@@ -3364,21 +3362,6 @@ export async function initializeSettings(): Promise<void> {
   if (window.electronAPI) {
     // Preferences are already in localStorage; do not wait for secret or provider hydration.
     try {
-      await window.electronAPI.syncNotificationPreferences?.({
-        notificationsEnabled: state.notificationsEnabled,
-        notifyMeetingDetection: state.notifyMeetingDetection,
-        notifyCalendarReminders: state.notifyCalendarReminders,
-        meetingProcessDetection: state.meetingProcessDetection,
-      });
-    } catch (err) {
-      logger.warn(
-        "Failed to sync notification preferences on startup",
-        { error: (err as Error).message },
-        "settings"
-      );
-    }
-
-    try {
       const [
         openai,
         anthropic,
@@ -3680,70 +3663,6 @@ export async function initializeSettings(): Promise<void> {
     } catch (err) {
       logger.warn(
         "Failed to sync automatic updates preference on startup",
-        { error: (err as Error).message },
-        "settings"
-      );
-    }
-
-    // The main-process DB is the source of truth for the Apple Calendar connection
-    try {
-      const status = await window.electronAPI.acalGetConnectionStatus?.();
-      if (status) {
-        useSettingsStore.getState().setAppleCalendarConnected(status.connected);
-      }
-    } catch (err) {
-      logger.warn(
-        "Failed to hydrate Apple Calendar connection status",
-        { error: (err as Error).message },
-        "settings"
-      );
-    }
-
-    // Picks up tenant ids stored after the accounts were first saved here; an
-    // empty answer (including a failed read) leaves the saved list alone.
-    try {
-      const status = await window.electronAPI.mcalGetConnectionStatus?.();
-      if (status?.accounts.length) {
-        useSettingsStore.getState().setMcalAccounts(status.accounts);
-      }
-    } catch (err) {
-      logger.warn(
-        "Failed to hydrate Microsoft Calendar accounts",
-        { error: (err as Error).message },
-        "settings"
-      );
-    }
-
-    try {
-      const currentState = useSettingsStore.getState();
-      await window.electronAPI.gcalSetPrimaryOnly?.(currentState.gcalPrimaryOnly);
-    } catch (err) {
-      logger.warn(
-        "Failed to sync gcal primary-only on startup",
-        { error: (err as Error).message },
-        "settings"
-      );
-    }
-
-    try {
-      const currentState = useSettingsStore.getState();
-      await window.electronAPI.mcalSetPrimaryOnly?.(currentState.mcalPrimaryOnly);
-    } catch (err) {
-      logger.warn(
-        "Failed to sync mcal primary-only on startup",
-        { error: (err as Error).message },
-        "settings"
-      );
-    }
-
-    try {
-      const currentState = useSettingsStore.getState();
-      await window.electronAPI.setSpeakerDiarizationEnabled?.(
-        currentState.speakerDiarizationEnabled
-      );
-    } catch (err) {
-      logger.warn(
-        "Failed to sync speaker diarization preference on startup",
         { error: (err as Error).message },
         "settings"
       );

@@ -292,7 +292,6 @@ const DatabaseManager = require("./src/helpers/database");
 const ClipboardManager = require("./src/helpers/clipboard");
 const WhisperManager = require("./src/helpers/whisper");
 const ParakeetManager = require("./src/helpers/parakeet");
-const DiarizationManager = require("./src/helpers/diarization");
 const TrayManager = require("./src/helpers/tray");
 const dockManager = require("./src/helpers/dockManager");
 const autoStart = require("./src/helpers/autoStart");
@@ -314,21 +313,6 @@ const {
   detectOutdatedGpuPacks,
 } = require("./src/helpers/gpuBinaryManager");
 const { resetWhisperGpuFailureOnUpgrade } = require("./src/helpers/whisperGpuUpgradeReset");
-const GoogleCalendarManager = require("./src/helpers/googleCalendarManager");
-const MicrosoftCalendarManager = require("./src/helpers/microsoftCalendarManager");
-const AppleCalendarManager = require("./src/helpers/appleCalendarManager");
-const CalendarReminderScheduler = require("./src/helpers/calendarReminderScheduler");
-const MeetingProcessDetector = require("./src/helpers/meetingProcessDetector");
-const AudioActivityDetector = require("./src/helpers/audioActivityDetector");
-const {
-  collectAudioCaptureHelperPids,
-  createExcludedProcessIdProvider,
-} = require("./src/helpers/electronProcessIds");
-const AudioTapManager = require("./src/helpers/audioTapManager");
-const LinuxPortalAudioManager = require("./src/helpers/linuxPortalAudioManager");
-const WindowsLoopbackAudioManager = require("./src/helpers/windowsLoopbackAudioManager");
-const MeetingAecManager = require("./src/helpers/meetingAecManager");
-const MeetingDetectionEngine = require("./src/helpers/meetingDetectionEngine");
 const { applyOpenWhisprOriginHeader } = require("./src/helpers/sessionHeaders");
 const { i18nMain, changeLanguage } = require("./src/helpers/i18nMain");
 const { ensureYdotool } = require("./src/helpers/ensureYdotool");
@@ -342,10 +326,8 @@ let windowManager = null;
 let hotkeyManager = null;
 let databaseManager = null;
 let clipboardManager = null;
-let connectorManager = null;
 let whisperManager = null;
 let parakeetManager = null;
-let diarizationManager = null;
 let trayManager = null;
 let updateManager = null;
 let globeKeyManager = null;
@@ -355,25 +337,12 @@ let textEditMonitor = null;
 let selectionManager = null;
 let whisperCudaManager = null;
 let whisperVulkanManager = null;
-let googleCalendarManager = null;
-let microsoftCalendarManager = null;
-let appleCalendarManager = null;
-let calendarReminderScheduler = null;
-let meetingDetectionEngine = null;
-let audioTapManager = null;
-let linuxPortalAudioManager = null;
-let windowsLoopbackAudioManager = null;
-let meetingAecManager = null;
-let semanticSearch = null;
 let ipcHandlers = null;
 let cliBridge = null;
 let globeKeyAlertShown = false;
 let macAccessibilityFeaturesReady = false;
 let startMacAccessibilityFeatures = null;
 let authBridgeServer = null;
-let pendingNoteCloudId = null;
-let pendingNoteRetryTimer = null;
-let pendingNoteRetryCount = 0;
 const WHISPER_WAKE_REWARM_DELAY_MS = 3000;
 let wakeRewarmTimer = null;
 
@@ -487,10 +456,9 @@ function initializeCoreManagers() {
   windowManager = new WindowManager();
   hotkeyManager = windowManager.hotkeyManager;
   databaseManager = new DatabaseManager();
-  // Restore the last validated account scope before any window, IPC handler,
-  // or meeting flow can read or create notes. Offline launches keep the
-  // account's data visible; a stale or rotated credential fails the hash
-  // check and restores nothing.
+  // Restore the last validated account scope before any window or IPC handler
+  // reads account data. Offline launches keep the account's data visible; a
+  // stale or rotated credential fails the hash check and restores nothing.
   const accountScopeBinding = require("./src/helpers/accountScopeBinding");
   const bootAccountId = accountScopeBinding.resolveBootAccountScope({
     token: require("./src/helpers/tokenStore").get(),
@@ -498,58 +466,6 @@ function initializeCoreManagers() {
   });
   if (bootAccountId) databaseManager.setActiveAccountId(bootAccountId);
   clipboardManager = new ClipboardManager();
-  const { createConnectorManager } = require("./src/helpers/connectors/connectorManager");
-  const { createPendingActions } = require("./src/helpers/connectors/pendingActions");
-  const { createActionLog } = require("./src/helpers/connectors/actionLog");
-  const { createCredentialStore } = require("./src/helpers/connectors/credentialStore");
-  const { createConnectorCredentials } = require("./src/helpers/connectors/connectorCredentials");
-  const { createConnectors } = require("./src/helpers/connectors/createConnectors");
-  const { runOAuthLoopbackFlow, OAuthFlowError } = require("./src/helpers/oauthLoopbackFlow");
-  const { broadcastToWindows } = require("./src/helpers/windowBroadcast");
-  const { connectorAccountIdFrom } = require("./src/helpers/connectors/connectorIpc");
-  // The same account receipts are filed under (ipcHandlers' getAccountScope):
-  // the one bound to the credential in use. databaseManager's scope doesn't
-  // move when one signed-in token replaces another.
-  const getConnectorAccountScope = () =>
-    accountScopeBinding.resolveActiveAccountScope({
-      ...require("./src/helpers/tokenStore").getState(),
-      binding: accountScopeBinding.read(),
-    });
-  const getConnectorAccountId = connectorAccountIdFrom(getConnectorAccountScope);
-  const connectorCredentials = createConnectorCredentials({
-    store: createCredentialStore({
-      dir: path.join(app.getPath("userData"), "connectors"),
-      secretCrypto: require("./src/helpers/secretCrypto"),
-      logger: debugLogger,
-    }),
-    getAccountId: getConnectorAccountId,
-  });
-  connectorManager = createConnectorManager({
-    connectors: createConnectors({
-      fetch: (url, init) => net.fetch(url, { ...init, useSessionCookies: false }),
-      i18n: i18nMain,
-      runOAuthLoopbackFlow,
-      OAuthFlowError,
-      credentials: connectorCredentials,
-      logger: debugLogger,
-      env: process.env,
-      openExternal: (url) => require("./src/helpers/externalUrlOpener").openExternalUrl(url),
-      writeClipboard: (text, webContents) => clipboardManager.writeClipboard(text, webContents),
-      // Read only when revoking a Gmail login on the calendar's Google project;
-      // the calendar manager is created below.
-      getGoogleCalendarAccounts: () => googleCalendarManager?.getAccounts() ?? [],
-      broadcast: broadcastToWindows,
-      notifyStatusChanged: () => void connectorManager?.notifyStatusChanged(),
-    }),
-    pendingActions: createPendingActions(),
-    actionLog: createActionLog(databaseManager),
-    logger: debugLogger,
-    getAccountId: getConnectorAccountId,
-    credentials: connectorCredentials,
-    onStatusChanged: (statuses) => broadcastToWindows("connector-status-changed", statuses),
-  });
-  // Pending cards expire in main even when no renderer ever answers them.
-  setInterval(() => connectorManager.sweepExpired(), 60 * 1000).unref();
   whisperManager = new WhisperManager();
   if (process.platform !== "darwin") {
     whisperCudaManager = new WhisperCudaManager();
@@ -604,54 +520,14 @@ function initializeCoreManagers() {
     whisperManager.setGpuBinaryManagers({ cuda: whisperCudaManager, vulkan: whisperVulkanManager });
   }
   parakeetManager = new ParakeetManager();
-  diarizationManager = new DiarizationManager();
-  calendarReminderScheduler = new CalendarReminderScheduler(databaseManager);
-  googleCalendarManager = new GoogleCalendarManager(
-    databaseManager,
-    windowManager,
-    calendarReminderScheduler
-  );
-  microsoftCalendarManager = new MicrosoftCalendarManager(
-    databaseManager,
-    calendarReminderScheduler
-  );
-  appleCalendarManager = new AppleCalendarManager(databaseManager, calendarReminderScheduler);
-  const meetingProcessDetector = new MeetingProcessDetector();
-  meetingDetectionEngine = new MeetingDetectionEngine(
-    calendarReminderScheduler,
-    meetingProcessDetector,
-    new AudioActivityDetector(
-      // The capture-helper managers are created a few lines below; the provider
-      // is only invoked on mic events, long after initialization completes.
-      createExcludedProcessIdProvider(() =>
-        collectAudioCaptureHelperPids([
-          audioTapManager,
-          linuxPortalAudioManager,
-          windowsLoopbackAudioManager,
-        ])
-      ),
-      () => meetingProcessDetector.getDetectedProcesses().length > 0
-    ),
-    windowManager,
-    databaseManager
-  );
-  windowManager.meetingDetectionEngine = meetingDetectionEngine;
-  calendarReminderScheduler.meetingDetectionEngine = meetingDetectionEngine;
   updateManager = new UpdateManager();
   updateManager.setWindowManager(windowManager);
   windowsKeyManager = new WindowsKeyManager();
   linuxKeyManager = new LinuxKeyManager();
   textEditMonitor = new TextEditMonitor();
   selectionManager = new SelectionManager({ clipboardManager, textEditMonitor });
-  audioTapManager = new AudioTapManager();
-  linuxPortalAudioManager = new LinuxPortalAudioManager();
-  windowsLoopbackAudioManager = new WindowsLoopbackAudioManager();
-  // Warm the capability cache off the hot path so the first meeting start
-  // doesn't pay the probe spawn. No-ops on non-Windows.
-  windowsLoopbackAudioManager.getCapability().catch(() => {});
   cleanupOrphanedLinuxRestoreToken();
   syncAutoStartEntry();
-  meetingAecManager = new MeetingAecManager();
   windowManager.textEditMonitor = textEditMonitor;
   windowManager.selectionManager = selectionManager;
   windowManager.windowsKeyManager = windowsKeyManager;
@@ -670,7 +546,6 @@ function initializeCoreManagers() {
     clipboardManager,
     whisperManager,
     parakeetManager,
-    diarizationManager,
     windowManager,
     updateManager,
     windowsKeyManager,
@@ -679,16 +554,6 @@ function initializeCoreManagers() {
     selectionManager,
     whisperCudaManager,
     whisperVulkanManager,
-    googleCalendarManager,
-    microsoftCalendarManager,
-    appleCalendarManager,
-    connectorManager,
-    meetingDetectionEngine,
-    audioTapManager,
-    linuxPortalAudioManager,
-    windowsLoopbackAudioManager,
-    meetingAecManager,
-    getSemanticSearch: () => semanticSearch,
     getTrayManager: () => trayManager,
     oauthProtocolRegistered: protocolRegistered,
     oauthProtocol: OAUTH_PROTOCOL,
@@ -698,9 +563,6 @@ function initializeCoreManagers() {
 function registerSidecars() {
   if (whisperManager) sidecarRegistry.register("whisper", () => whisperManager.stopServer());
   if (parakeetManager) sidecarRegistry.register("parakeet", () => parakeetManager.stopServer());
-  if (diarizationManager) {
-    sidecarRegistry.register("diarization", () => diarizationManager.shutdown());
-  }
   const modelManager = require("./src/helpers/modelManagerBridge").default;
   sidecarRegistry.register("llama", () => modelManager.stopServer());
   const onnxWorkerClient = require("./src/helpers/onnxWorkerClient");
@@ -751,11 +613,6 @@ function initializeDeferredManagers() {
       });
     });
   }
-
-  googleCalendarManager.start();
-  microsoftCalendarManager.start();
-  appleCalendarManager.start();
-  meetingDetectionEngine.start();
 }
 
 app.on("open-url", (event, url) => {
@@ -764,11 +621,6 @@ app.on("open-url", (event, url) => {
 
   if (url.includes("upgrade-success")) {
     handleUpgradeDeepLink();
-    return;
-  }
-
-  if (isNoteDeepLink(url)) {
-    void handleNoteDeepLink(url);
     return;
   }
 
@@ -797,79 +649,6 @@ ipcMain.handle("get-pending-invitation-token", () => {
   pendingInvitationDeepLinkToken = null;
   return token;
 });
-
-function isNoteDeepLink(url) {
-  return url.slice(`${OAUTH_PROTOCOL}://`.length).startsWith("notes/");
-}
-
-function parseNoteCloudId(deepLinkUrl) {
-  try {
-    const match = deepLinkUrl.match(/notes\/([^/?#]+)/);
-    const cloudId = match?.[1] ? decodeURIComponent(match[1]) : "";
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cloudId)
-      ? cloudId
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function clearPendingNoteDeepLink() {
-  clearTimeout(pendingNoteRetryTimer);
-  pendingNoteRetryTimer = null;
-  pendingNoteCloudId = null;
-  pendingNoteRetryCount = 0;
-}
-
-async function flushPendingNoteDeepLink() {
-  if (!pendingNoteCloudId || !windowManager || !databaseManager) return;
-
-  try {
-    // Surface the panel on the first attempt only; retries just poll the
-    // database so they can't repeatedly steal focus.
-    if (pendingNoteRetryCount === 0) {
-      await windowManager.createControlPanelWindow();
-    }
-
-    const note = databaseManager.getNoteByCloudId(pendingNoteCloudId);
-    if (!note) {
-      // Cloud sync may still be hydrating during a cold launch. Retry briefly so
-      // the handoff can resolve a note pulled after the protocol event arrived.
-      pendingNoteRetryCount += 1;
-      if (pendingNoteRetryCount <= 10) {
-        clearTimeout(pendingNoteRetryTimer);
-        pendingNoteRetryTimer = setTimeout(() => {
-          void flushPendingNoteDeepLink();
-        }, 1000);
-      } else {
-        console.warn("Note deep link could not resolve a local note", {
-          cloudId: pendingNoteCloudId,
-        });
-        clearPendingNoteDeepLink();
-      }
-      return;
-    }
-
-    const payload = { noteId: note.id, folderId: note.folder_id ?? null };
-    clearPendingNoteDeepLink();
-    await windowManager.queueNoteNavigation(payload);
-  } catch (error) {
-    console.error("Note deep link failed:", error);
-    clearPendingNoteDeepLink();
-  }
-}
-
-async function handleNoteDeepLink(deepLinkUrl) {
-  const cloudId = parseNoteCloudId(deepLinkUrl);
-  if (!cloudId) {
-    console.warn("Invalid note deep link");
-    return;
-  }
-
-  clearPendingNoteDeepLink();
-  pendingNoteCloudId = cloudId;
-  await flushPendingNoteDeepLink();
-}
 
 function handleInvitationDeepLink(deepLinkUrl) {
   try {
@@ -1244,19 +1023,14 @@ async function startApp() {
   // Windows/Linux cold start delivers protocol URLs via argv (macOS uses
   // open-url); without this scan a deep link that launches the app is lost.
   const initialProtocolUrl = process.argv.find((arg) => arg.startsWith(`${OAUTH_PROTOCOL}://`));
-  if (initialProtocolUrl && isNoteDeepLink(initialProtocolUrl)) {
-    await handleNoteDeepLink(initialProtocolUrl);
-  } else {
-    if (initialProtocolUrl && process.platform !== "darwin") {
-      if (initialProtocolUrl.includes("upgrade-success")) {
-        handleUpgradeDeepLink();
-      } else if (isInvitationDeepLink(initialProtocolUrl)) {
-        handleInvitationDeepLink(initialProtocolUrl);
-      } else {
-        void handleOAuthDeepLink(initialProtocolUrl);
-      }
+  if (initialProtocolUrl && process.platform !== "darwin") {
+    if (initialProtocolUrl.includes("upgrade-success")) {
+      handleUpgradeDeepLink();
+    } else if (isInvitationDeepLink(initialProtocolUrl)) {
+      handleInvitationDeepLink(initialProtocolUrl);
+    } else {
+      void handleOAuthDeepLink(initialProtocolUrl);
     }
-    await flushPendingNoteDeepLink();
   }
 
   await hotkeyManager.hyprlandRegistrationReady;
@@ -1314,50 +1088,6 @@ async function startApp() {
     hotkeyManager.notifyRestoreFailures(savedTranslationKey, result);
   }
 
-  // Set up meeting mode hotkey
-  const isMeetingPress = createHotkeyRepeatGate();
-  const meetingHotkeyCallback = () => {
-    if (!isMeetingPress()) return;
-    debugLogger.info("Meeting hotkey triggered", {}, "meeting");
-    // Usually pressed mid-call: an open panel updates behind the meeting app.
-    windowManager.startManualMeeting({ activate: false });
-  };
-
-  const savedMeetingKey = environmentManager.getMeetingKey?.() || "";
-  if (savedMeetingKey) {
-    const result = await hotkeyManager.registerSlot(
-      "meeting",
-      savedMeetingKey,
-      meetingHotkeyCallback
-    );
-    debugLogger.info(
-      "Meeting hotkey startup registration",
-      { savedMeetingKey, ...result },
-      "meeting"
-    );
-    hotkeyManager.notifyRestoreFailures(savedMeetingKey, result);
-  }
-
-  ipcMain.handle("register-meeting-hotkey", async (_event, hotkey) => {
-    if (hotkey) {
-      const result = await hotkeyManager.registerSlot("meeting", hotkey, meetingHotkeyCallback, {
-        atomic: true,
-      });
-      windowManager.reconcileNativeKeyListeners();
-      if (result.success) {
-        environmentManager.saveMeetingKey(hotkey);
-        return { success: true };
-      }
-      return { success: false, message: result.error };
-    } else {
-      const removed = await hotkeyManager.unregisterSlot("meeting");
-      if (removed === false) return { success: false };
-      environmentManager.saveMeetingKey("");
-      windowManager.reconcileNativeKeyListeners();
-      return { success: true };
-    }
-  });
-
   // Phase 2: Initialize remaining managers after windows are visible
   initializeDeferredManagers();
   if (process.platform === "darwin") {
@@ -1366,20 +1096,8 @@ async function startApp() {
     await globeKeyManager.restoreLeftoverSystemPreference();
   }
 
-  app.on("browser-window-focus", () => {
-    if (googleCalendarManager) googleCalendarManager.syncOnFocus();
-    if (microsoftCalendarManager) microsoftCalendarManager.syncOnFocus();
-    if (appleCalendarManager) appleCalendarManager.syncOnFocus();
-  });
-
   const { powerMonitor } = require("electron");
   powerMonitor.on("resume", () => {
-    if (calendarReminderScheduler) calendarReminderScheduler.onWakeFromSleep();
-    if (googleCalendarManager) {
-      googleCalendarManager.onWakeFromSleep();
-    }
-    if (microsoftCalendarManager) microsoftCalendarManager.onWakeFromSleep();
-    if (appleCalendarManager) appleCalendarManager.onWakeFromSleep();
     // Sleep evicts the local GPU model from VRAM; reload it once the driver settles. See #766.
     if (wakeRewarmTimer) clearTimeout(wakeRewarmTimer);
     wakeRewarmTimer = setTimeout(() => {
@@ -1430,32 +1148,6 @@ async function startApp() {
       });
     });
   }
-
-  // Auto-download diarization models if binary is available
-  if (
-    diarizationManager.getBinaryPath() &&
-    (!diarizationManager.isModelDownloaded() || !diarizationManager.isVadModelDownloaded())
-  ) {
-    diarizationManager.downloadModels().catch((err) => {
-      debugLogger.debug("Diarization model auto-download error (non-fatal)", {
-        error: err.message,
-      });
-    });
-  }
-
-  const QdrantManager = require("./src/helpers/qdrantManager");
-  const SemanticSearchLifecycle = require("./src/helpers/semanticSearchLifecycle");
-  const localEmbeddings = require("./src/helpers/localEmbeddings");
-  const qdrantManager = new QdrantManager();
-  semanticSearch = new SemanticSearchLifecycle({
-    qdrant: qdrantManager,
-    vectorIndex: require("./src/helpers/vectorIndex"),
-    embeddings: localEmbeddings,
-    noteEmbedText: localEmbeddings.LocalEmbeddings.noteEmbedText,
-    database: databaseManager,
-    logger: debugLogger,
-  });
-  sidecarRegistry.register("qdrant", () => semanticSearch.stop());
 
   if (process.platform === "win32") {
     const nircmdStatus = clipboardManager.getNircmdStatus();
@@ -1810,16 +1502,6 @@ async function startApp() {
       }
     });
 
-    // Allow renderer to request an accessibility check (e.g. on sign-in).
-    // Also sends accessibility-missing events if untrusted.
-    ipcMain.handle("check-accessibility-trusted", () => {
-      const trusted = systemPreferences.isTrustedAccessibilityClient(false);
-      if (!trusted) {
-        checkAndNotifyAccessibility();
-      }
-      return trusted;
-    });
-
     // Reset native key state when hotkey changes
     ipcMain.on("hotkey-changed", (_event, _newHotkey) => {
       globeKeyDownTime = 0;
@@ -1844,8 +1526,8 @@ async function startApp() {
     const nativeKeyManager = isWindows ? windowsKeyManager : linuxKeyManager;
     debugLogger.debug("[Push-to-Talk] Native key listener setup starting");
 
-    // Dictation supports push-to-talk and needs the overlay window; meeting
-    // drives other windows (matching their globalShortcut callbacks and macOS).
+    // Dictation supports push-to-talk and needs the overlay window; the other
+    // slots drive other windows (matching their globalShortcut callbacks and macOS).
     const dispatchNativeKeyDown = (key) => {
       if (hotkeyManager.slotHasHotkey("dictation", key)) {
         if (!isLiveWindow(windowManager.mainWindow)) return;
@@ -1860,8 +1542,6 @@ async function startApp() {
         windowManager.sendToggleVoiceAgent();
       } else if (hotkeyManager.slotHasHotkey("translation", key)) {
         windowManager.sendToggleTranslation();
-      } else if (hotkeyManager.slotHasHotkey("meeting", key)) {
-        windowManager.startManualMeeting({ activate: false });
       }
     };
 
@@ -1987,8 +1667,6 @@ if (gotSingleInstanceLock) {
     if (url) {
       if (url.includes("upgrade-success")) {
         handleUpgradeDeepLink();
-      } else if (isNoteDeepLink(url)) {
-        await handleNoteDeepLink(url);
       } else if (isInvitationDeepLink(url)) {
         handleInvitationDeepLink(url);
       } else {
@@ -2110,7 +1788,6 @@ function performSyncTeardown() {
     clearTimeout(wakeRewarmTimer);
     wakeRewarmTimer = null;
   }
-  clearPendingNoteDeepLink();
   if (authBridgeServer) {
     authBridgeServer.close();
     authBridgeServer = null;
@@ -2127,15 +1804,6 @@ function performSyncTeardown() {
   if (globeKeyManager) globeKeyManager.stop();
   if (windowsKeyManager) windowsKeyManager.stop();
   if (linuxKeyManager) linuxKeyManager.stop();
-  if (meetingDetectionEngine) meetingDetectionEngine.stop();
-  if (googleCalendarManager) googleCalendarManager.stop();
-  if (microsoftCalendarManager) microsoftCalendarManager.stop();
-  if (appleCalendarManager) appleCalendarManager.stop();
-  if (calendarReminderScheduler) calendarReminderScheduler.stop();
-  if (audioTapManager) audioTapManager.stop().catch(() => {});
-  if (linuxPortalAudioManager) linuxPortalAudioManager.stop().catch(() => {});
-  if (windowsLoopbackAudioManager) windowsLoopbackAudioManager.stop().catch(() => {});
-  if (meetingAecManager) meetingAecManager.stop().catch(() => {});
   if (ipcHandlers) ipcHandlers._cleanupTextEditMonitor();
   if (textEditMonitor) textEditMonitor.stopMonitoring();
   if (updateManager) updateManager.cleanup();

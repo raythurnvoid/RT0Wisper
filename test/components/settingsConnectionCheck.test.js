@@ -65,5 +65,5 @@ test("Settings' sections and sub-tabs use the shared TabPanel", () => {
   const settings = source("src/components/SettingsPage.tsx");
   assert.match(settings, /import \{ TabPanel \} from "\.\/ui\/TabPanel";/);
   assert.doesNotMatch(settings, /function TabPanel\(/);
-  assert.equal(settings.match(/<TabPanel active=/g).length, 10);
+  assert.equal(settings.match(/<TabPanel active=/g).length, 3);
 });

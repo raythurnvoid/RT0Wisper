@@ -2,9 +2,6 @@ import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } fr
 import { useTranslation } from "react-i18next";
 import { Check, Copy, Plus, X } from "../icons";
 import { BrandMarkIcon } from "./BrandMarkIcon";
-import { HelpEvidence } from "../chat/GroundedHelpEvidence";
-import { extractHelpEvidence } from "../chat/helpEvidence";
-import { helpAnswerPlainText } from "../chat/helpEvidenceText";
 import { MarkdownRenderer } from "../ui/MarkdownRenderer";
 import { TechnicalErrorDetails } from "../ui/TechnicalErrorDetails";
 import { openProviderSettings } from "../../utils/describeProviderError";
@@ -48,8 +45,6 @@ import {
   type AssistantResponseDelivery,
 } from "../../helpers/assistantResponseDelivery";
 import { buildAssistantCommandSendOptions } from "./assistantCommandOptions";
-import { ApprovalCard } from "../chat/ApprovalCard";
-import { approvalKey, useConnectorApprovalStore } from "../../stores/connectorApprovalStore";
 
 export interface AssistantCommand {
   id: number;
@@ -111,7 +106,7 @@ export function AssistantPanel({
   onConversationReset,
   onSelectionContextChange,
 }: AssistantPanelProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { handleMouseDown, handleMouseUp } = useWindowDrag();
   const voiceAgentKey = useSettingsStore((state) => state.voiceAgentKey);
@@ -125,7 +120,6 @@ export function AssistantPanel({
     setMessages,
     // Spoken commands answer on the Voice Assistant scope, not the Chat one.
     inferenceScope: "dictationAgent",
-    allowConnectors: true,
     onStreamComplete: (_assistantId, content, toolCalls) => {
       void persistence.saveAssistantMessage(content, toolCalls);
     },
@@ -152,35 +146,19 @@ export function AssistantPanel({
     .reverse()
     .find((message) => message.role === "assistant");
   const responseContent = latestAssistantMessage?.content ?? "";
-  // A follow-up keeps the previous answer, and its help sources, on screen
+  // A follow-up keeps the previous answer on screen
   // until the new answer has content.
   const displayedMessageRef = useRef<Message | undefined>(undefined);
   if (responseContent) displayedMessageRef.current = latestAssistantMessage;
   const displayedMessage = displayedMessageRef.current;
   const displayedResponse = displayedMessage?.content ?? "";
-  const helpEvidence = extractHelpEvidence(displayedMessage?.toolCalls);
-  // Keyed by the answer itself, which is what auto-copy confirms; explicit
-  // Copy adds the help sources to what it writes.
+  // Keyed by the answer itself, which is what auto-copy confirms.
   const { copied, copyText, confirmCopied } = useCopyFeedback(responseContent, {
     resetMs: MANUAL_COPY_FEEDBACK_MS,
   });
   const handleCopy = useCallback(async () => {
-    const responseCopyText = helpAnswerPlainText(
-      displayedResponse,
-      helpEvidence,
-      t,
-      i18n?.resolvedLanguage
-    );
-    if (await copyText(responseCopyText.trim())) confirmCopied(responseContent);
-  }, [
-    copyText,
-    confirmCopied,
-    displayedResponse,
-    helpEvidence,
-    t,
-    i18n?.resolvedLanguage,
-    responseContent,
-  ]);
+    if (await copyText(displayedResponse.trim())) confirmCopied(responseContent);
+  }, [copyText, confirmCopied, displayedResponse, responseContent]);
 
   useEffect(() => {
     onConversationIdChange(persistence.conversationId);
@@ -281,16 +259,7 @@ export function AssistantPanel({
     t,
   ]);
 
-  const approvalEntries = useConnectorApprovalStore((state) => state.entries);
-  const panelApprovals = latestAssistantMessage
-    ? (latestAssistantMessage.toolCalls ?? [])
-        .map((toolCall) => approvalEntries[approvalKey(latestAssistantMessage.id, toolCall.id)])
-        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
-    : [];
-  const approvalAwaitingUser = panelApprovals.some(
-    (entry) => entry.state === "pending" || entry.state === "committing"
-  );
-  const isToolExecuting = Boolean(streaming.activeToolName) && !approvalAwaitingUser;
+  const isToolExecuting = Boolean(streaming.activeToolName);
   const isBusy = resolveAssistantPanelBusy({
     agentState: streaming.agentState,
     activeToolName: streaming.activeToolName,
@@ -547,7 +516,6 @@ export function AssistantPanel({
                     />
                   )}
                 </div>
-                {helpEvidence && <HelpEvidence evidence={helpEvidence} />}
                 {/* Outside responseSelectionRootRef: a drag-select + copy over the
                     response must never pick up these affordances. */}
                 {latestAssistantMessage?.error?.settingsTarget && (
@@ -566,9 +534,6 @@ export function AssistantPanel({
                 )}
               </>
             ) : null}
-            {panelApprovals.map((entry) => (
-              <ApprovalCard key={entry.key} entry={entry} />
-            ))}
             {thinking && (
               <div role="status">
                 <span className="sr-only">{t("agentMode.input.thinking")}</span>

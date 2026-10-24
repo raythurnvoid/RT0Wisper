@@ -177,61 +177,6 @@ test("a validated sign-out clears the scope and broadcasts the clearing", async 
   assert.deepEqual(broadcasts, [["active-account-scope-changed", null]]);
 });
 
-test("a scope change stops connects another account started, after the scope moves", async () => {
-  tokenState = { token: "token-c", generation: 5 };
-  connectorCalls.length = 0;
-  await setScope("account-c", 5);
-  await setScope(null, 5);
-  assert.deepEqual(connectorCalls, [
-    ["accountChanged", "account-c"],
-    ["notifyStatusChanged"],
-    ["accountChanged", null],
-    ["notifyStatusChanged"],
-  ]);
-});
-
-test("a sign-out in main stops connects without waiting for the renderer", async () => {
-  tokenState = { token: "token-d", generation: 6 };
-  await setScope("account-d", 6);
-  connectorCalls.length = 0;
-
-  // A rotated token isn't another account: connects keep running.
-  handleAuthTokenChange({ generation: 7, token: "token-e" });
-  assert.deepEqual(connectorCalls, [["notifyStatusChanged"]]);
-
-  connectorCalls.length = 0;
-  databaseScopes.length = 0;
-  broadcasts.length = 0;
-  handleAuthTokenChange({ generation: 8, token: null });
-  assert.deepEqual(connectorCalls, [["accountChanged", null], ["notifyStatusChanged"]]);
-  assert.equal(readBinding(), null);
-  assert.deepEqual(databaseScopes, [null]);
-  assert.deepEqual(broadcasts, [
-    ["active-account-scope-changed", null],
-    ["auth-token-state-changed", { generation: 8, hasToken: false }],
-  ]);
-});
-
-test("meeting prompt retirement precedes scope mutation and skips a true no-op", async () => {
-  tokenState = { token: "meeting-test-token", generation: 20 };
-  const originalManager = fakeThis.windowManager;
-  const calls = [];
-  fakeThis.windowManager = {
-    retireMeetingNotificationScope: () => calls.push(databaseManager.activeAccountId),
-  };
-  databaseManager.activeAccountId = "old-account";
-  await setScope("meeting-account", 20);
-  assert.deepEqual(calls, ["old-account"]);
-  databaseManager.activeAccountId = "meeting-account";
-  await setScope("meeting-account", 20);
-  assert.deepEqual(calls, ["old-account"]);
-  handleAuthTokenChange({ token: "rotated", generation: 21 });
-  assert.deepEqual(calls, ["old-account", "meeting-account"]);
-  handleAuthTokenChange({ token: null, generation: 22 });
-  assert.deepEqual(calls, ["old-account", "meeting-account", "meeting-account"]);
-  fakeThis.windowManager = originalManager;
-});
-
 test("activation storage failure cannot prevent clearing the local bearer", async () => {
   const manager = fakeThis.metaActivation;
   fakeThis.metaActivation = {
