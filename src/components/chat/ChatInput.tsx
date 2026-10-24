@@ -475,13 +475,8 @@ export function ChatInput({
               <button
                 key="mic"
                 onClick={voice.start}
-                disabled={voice.streamingOnlyProvider}
                 aria-label={t("notes.editor.transcribe")}
-                title={
-                  voice.streamingOnlyProvider
-                    ? t("agentMode.input.voiceDraftStreamingOnly")
-                    : t("notes.editor.transcribe")
-                }
+                title={t("notes.editor.transcribe")}
                 className={cn(
                   "flex items-center justify-center rounded-full shrink-0",
                   hasRoundSend ? "size-8" : cn("w-7 h-7", expandOnFocus && COLLAPSED_ROW_CENTER),
@@ -490,9 +485,7 @@ export function ChatInput({
                   GRADIENT_CIRCLE,
                   "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30",
                   "transition-all duration-100",
-                  voice.streamingOnlyProvider
-                    ? "opacity-30 saturate-0 cursor-default"
-                    : "hover:brightness-110 active:scale-95"
+                  "hover:brightness-110 active:scale-95"
                 )}
               >
                 <Mic size={hasRoundSend ? 16 : 14} />

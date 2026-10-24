@@ -23,7 +23,6 @@ function createManager(AudioManager, transcription) {
     _processingCancellationGeneration: 0,
     _streamingStopPromise: null,
     _streamingCancellationGeneration: 0,
-    _activeTranscriptionAbortController: null,
     pendingAssistantConversation: null,
     pendingSelectionEdit: null,
     lastAudioBlob: {},
@@ -52,7 +51,6 @@ function createBatchFinalizationManager(AudioManager, merge) {
     _processingCancellationGeneration: 0,
     _streamingCancellationGeneration: 0,
     _streamingStopPromise: null,
-    _activeTranscriptionAbortController: null,
     _batchSegments: [],
     _receivedAudioData: true,
     _localSpeechGateState: null,
@@ -302,7 +300,7 @@ async function loadCancelGuardManagerClass(t) {
           globalThis.__streamingLeakCleanupFailureCalls.push(message);
         };
       `,
-      // processWithOpenWhisprCloud's "agent" route walks through
+      // The "agent" route walks through
       // resolveReasoningRoute -> dictationAgentPrompt -> resolvePrompt, which
       // reads the real useSettingsStore zustand store for custom prompts.
       // Mocking /config/prompts (as the real ReasoningService flow does in
@@ -352,9 +350,6 @@ async function loadCancelGuardManagerClass(t) {
     writable: true,
     configurable: true,
   });
-  // The harness's window stub has no EventTarget surface; the batch-fallback
-  // success path fires a plain usage-changed notification off it.
-  window.dispatchEvent = () => {};
   return { AudioManager, window };
 }
 
@@ -373,7 +368,6 @@ function createStreamingLeakManager(AudioManager) {
     _streamingStopMode: null,
     _processingCancellationGeneration: 0,
     _streamingCancellationGeneration: 0,
-    _activeTranscriptionAbortController: null,
     _streamingSessionGeneration: 1,
     _activeStreamingSessionId: 1,
     _streamingMicSwapPromise: null,
@@ -408,11 +402,12 @@ function createStreamingLeakManager(AudioManager) {
         return { success: true };
       },
     }),
-    getStreamingProviderName: () => "openai",
+    getStreamingProviderName: () => "mistral-realtime",
     shouldUseStreaming: () => false,
     isRecordingAllowedByPolicy: () => true,
-    // Real processWithOpenWhisprCloud runs; these three would otherwise need
-    // more settings/state than this scenario cares about.
+    // Real processWithOpenAIAPI runs; these would otherwise need more
+    // settings/state than this scenario cares about.
+    getAPIKey: async () => "mk-mistral",
     isDictionaryEcho: () => false,
     getWhisperPrompt: () => null,
     finalizeChineseScript: async (text) => text,
@@ -430,7 +425,7 @@ test("a cancelled batch pipeline cannot clear newer streaming finalization", asy
   manager.isProcessing = true;
   manager.isStreaming = false;
   manager._localSpeechGateState = null;
-  manager.processWithOpenWhisprCloud = () => oldTranscription.promise;
+  manager.processWithOpenAIAPI = () => oldTranscription.promise;
 
   const oldRun = manager.processAudio(new Blob(["old"], { type: "audio/webm" }));
   assert.equal(manager.cancelProcessing(), true);
@@ -443,7 +438,7 @@ test("a cancelled batch pipeline cannot clear newer streaming finalization", asy
   const streamingStop = manager.stopStreamingRecording();
   assert.equal(manager.isProcessing, true);
 
-  oldTranscription.resolve({ success: true, text: "old", source: "openwhispr", timings: {} });
+  oldTranscription.resolve({ success: true, text: "old", source: "mistral", timings: {} });
   await oldRun;
   const remainedBusy = manager.isProcessing;
   await streamingStop;
@@ -459,15 +454,10 @@ test("a cancelled batch pipeline does not swallow a real cleanup failure in a la
   const { AudioManager, window } = await loadCancelGuardManagerClass(t);
   const { manager, completions } = createStreamingLeakManager(AudioManager);
   globalThis.__streamingLeakCleanupFailureCalls = [];
-  window.electronAPI.cloudTranscribe = async () => ({
-    success: true,
-    text: "the raw transcript",
-  });
-  window.electronAPI.cloudReason = async () => ({
-    success: false,
-    error: "genuine cloud reasoning failure",
-    code: "SERVER_ERROR",
-  });
+  window.electronAPI.proxyMistralTranscription = async () => ({ text: "the raw transcript" });
+  manager.processWithReasoningModel = async () => {
+    throw Object.assign(new Error("genuine cloud reasoning failure"), { code: "SERVER_ERROR" });
+  };
 
   // Simulate an earlier batch cancellation. The new streaming session does
   // not capture that batch pipeline's old generation.
@@ -489,19 +479,17 @@ test("a cancelled batch pipeline does not swallow a real cleanup failure in a la
   );
 });
 
-// Finding 2 (round-1 review override): processWithOpenWhisprCloud's catch
-// gates _notifyAgentReasoningFailed() too, not just the logger/cleanup-store
-// calls the brief named. Without that, a cancelled voice-agent command whose
-// cloud reasoning also happens to fail would still pop an "Agent Unavailable"
-// toast via onError({ code: "AGENT_REASONING_FAILED" }) — the useAudioRecording
-// cancel guard only filters TRANSCRIPTION_CANCELLED/REASON_CANCELLED, so that
-// toast would reach the user, directly contradicting this task's goal.
-test("a cancelled voice-agent command's cloud reasoning failure notifies nothing", async (t) => {
+// A cancelled voice-agent command whose reasoning also fails must not pop an
+// "Agent Unavailable" toast via onError({ code: "AGENT_REASONING_FAILED" }): the
+// useAudioRecording cancel guard only filters TRANSCRIPTION_CANCELLED and
+// REASON_CANCELLED, so that toast would reach the user.
+test("a cancelled voice-agent command's reasoning failure notifies nothing", async (t) => {
   const { AudioManager, window } = await loadCancelGuardManagerClass(t);
   const errors = [];
   const manager = Object.assign(Object.create(AudioManager.prototype), {
     voiceAgentRequested: true,
     translationRequested: false,
+    getAPIKey: async () => "mk-mistral",
     isDictionaryEcho: () => false,
     getWhisperPrompt: () => null,
     finalizeChineseScript: async (text) => text,
@@ -510,12 +498,9 @@ test("a cancelled voice-agent command's cloud reasoning failure notifies nothing
     },
     onError: (error) => errors.push(error),
   });
-  window.electronAPI.cloudTranscribe = async () => ({
-    success: true,
-    text: "the raw transcript",
-  });
+  window.electronAPI.proxyMistralTranscription = async () => ({ text: "the raw transcript" });
 
-  const result = await manager.processWithOpenWhisprCloud(
+  const result = await manager.processWithOpenAIAPI(
     {
       size: 1024,
       type: "audio/webm",

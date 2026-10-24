@@ -2,9 +2,9 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const Module = require("node:module");
 
-// #2050: the dictation language must reach the realtime session on every path
-// the dictation-realtime-* handlers own — the BYOK session.update, the cloud
-// token request, and a warm connection minted for a different language.
+// #2050: the dictation language must reach the Mistral session on every path
+// the dictation-realtime-* handlers own, including a warm connection opened for
+// a different language.
 
 const handlersModulePath = require.resolve("../../src/helpers/ipcHandlers");
 const originalLoad = Module._load;
@@ -45,13 +45,14 @@ const electronStub = {
   MessageChannelMain: class {},
 };
 
-const calls = { connects: [], disconnects: [], tokens: [], audio: [], sent: [], instances: [] };
+const calls = { connects: [], disconnects: [], audio: [], sent: [], instances: [] };
 let nextInstance = 0;
 
 class FakeRealtimeStreaming {
   constructor() {
     this.id = ++nextInstance;
     this.isConnected = false;
+    this.audioBytesSent = 0;
     this.options = null;
     calls.instances.push(this);
   }
@@ -71,21 +72,14 @@ class FakeRealtimeStreaming {
     return true;
   }
 }
-FakeRealtimeStreaming.normalizeLanguage =
-  require("../../src/helpers/openaiRealtimeStreaming").normalizeLanguage;
-
 Module._load = function loadWithMocks(request, parent, isMain) {
   if (request === "electron") return electronStub;
   if (parent?.filename === handlersModulePath) {
     if (request === "./debugLogger") return new Proxy({}, { get: () => () => {} });
-    if (request === "./openaiRealtimeStreaming") return FakeRealtimeStreaming;
-    if (request === "./realtimeTokenProviders") {
+    if (request === "./mistralRealtimeStreaming") {
       return {
-        ...originalLoad.call(this, request, parent, isMain),
-        fetchRealtimeTokenForProvider: async (provider, _deps, options) => {
-          calls.tokens.push({ provider, options });
-          return "secret";
-        },
+        MistralRealtimeStreaming: FakeRealtimeStreaming,
+        MISTRAL_REALTIME_MODEL: "voxtral-rt",
       };
     }
   }
@@ -106,7 +100,10 @@ function anything() {
   });
 }
 
+let mistralKey;
+
 function scenario(t) {
+  mistralKey = "mistral-key";
   for (const record of Object.values(calls)) record.length = 0;
   // Seed the constructor's dictation fields: the proxy's catch-all would make
   // `this._dictationStreaming?.isConnected` truthy on a cold start.
@@ -114,7 +111,7 @@ function scenario(t) {
     _dictationStreaming: null,
     _dictationConnectPromise: null,
     _dictationIdleTimer: null,
-    _dictationPreviewEnabled: false,
+    environmentManager: { getMistralKey: () => mistralKey },
     windowManager: { hideTranscriptionPreview() {}, showTranscriptionPreview() {} },
   };
   const IPCHandlers = require(handlersModulePath);
@@ -130,67 +127,41 @@ function scenario(t) {
   return { invoke, sendAudio };
 }
 
-const byok = (overrides) => ({
-  provider: "openai-realtime",
-  mode: "byok",
-  model: "gpt-4o-mini-transcribe",
-  language: "de",
-  ...overrides,
-});
+const dictation = (overrides) => ({ language: "de", keyterms: ["Voxtral"], ...overrides });
 
-test("a cold BYOK start passes the dictation language to the realtime session", async (t) => {
+test("a cold start passes the key, model, language and word list to the Mistral session", async (t) => {
   const s = scenario(t);
-  assert.deepEqual(await s.invoke("dictation-realtime-start", byok()), { success: true });
+  assert.deepEqual(await s.invoke("dictation-realtime-start", dictation()), { success: true });
   assert.equal(calls.connects.length, 1);
-  assert.equal(calls.connects[0].options.language, "de");
-  assert.equal(calls.connects[0].options.model, "gpt-4o-mini-transcribe");
-  assert.equal(calls.connects[0].options.preconfigured, false);
+  assert.deepEqual(calls.connects[0].options, {
+    apiKey: "mistral-key",
+    model: "voxtral-rt",
+    language: "de",
+    keyterms: ["Voxtral"],
+  });
 });
 
-test("a cloud start sends the language with the token request and leaves the model to the server", async (t) => {
+test("a start without a saved Mistral key fails with NO_API", async (t) => {
   const s = scenario(t);
-  await s.invoke(
-    "dictation-realtime-start",
-    byok({ mode: "openwhispr", model: "gpt-4o-transcribe", language: "de" })
-  );
-  assert.equal(calls.tokens.length, 1);
-  assert.equal(calls.tokens[0].provider, "openai-realtime");
-  assert.equal(calls.tokens[0].options.language, "de");
-  // The server owns the managed dictation model; a stale non-OpenAI id in
-  // settings must not reach the client-secret request.
-  assert.equal("model" in calls.tokens[0].options, false);
-  assert.equal(calls.connects[0].options.preconfigured, true);
+  mistralKey = "";
+  const result = await s.invoke("dictation-realtime-start", dictation());
+  assert.equal(result.success, false);
+  assert.equal(result.code, "NO_API");
+  assert.equal(calls.connects.length, 0);
 });
 
-test("the cloud token request carries the base language code and leaves it unset for auto", async (t) => {
+test("a start reuses a warm connection opened for the same language and word list", async (t) => {
   const s = scenario(t);
-  await s.invoke("dictation-realtime-start", byok({ mode: "openwhispr", language: "zh-TW" }));
-  await s.invoke("dictation-realtime-stop");
-  await s.invoke("dictation-realtime-start", byok({ mode: "openwhispr", language: "auto" }));
-  assert.equal(calls.tokens[0].options.language, "zh");
-  assert.equal("language" in calls.tokens[1].options, true);
-  assert.equal(calls.tokens[1].options.language, undefined);
-});
-
-test("the tinfoil branch keeps its language-free connect (voxtral support is unverified)", async (t) => {
-  const s = scenario(t);
-  await s.invoke("dictation-realtime-start", byok({ provider: "tinfoil-realtime" }));
-  assert.equal(calls.connects.length, 1);
-  assert.equal("language" in calls.connects[0].options, false);
-});
-
-test("a start reuses a warm connection minted for the same language and model", async (t) => {
-  const s = scenario(t);
-  await s.invoke("dictation-realtime-warmup", byok());
-  await s.invoke("dictation-realtime-start", byok());
+  await s.invoke("dictation-realtime-warmup", dictation());
+  await s.invoke("dictation-realtime-start", dictation());
   assert.equal(calls.connects.length, 1, "no redial");
   assert.deepEqual(calls.disconnects, []);
 });
 
-test("a start redials when the warm connection was minted for another language", async (t) => {
+test("a start redials when the warm connection was opened for another language", async (t) => {
   const s = scenario(t);
-  await s.invoke("dictation-realtime-warmup", byok({ language: "de" }));
-  await s.invoke("dictation-realtime-start", byok({ language: undefined }));
+  await s.invoke("dictation-realtime-warmup", dictation({ language: "de" }));
+  await s.invoke("dictation-realtime-start", dictation({ language: undefined }));
   assert.equal(calls.connects.length, 2, "warm German session cannot serve an Auto dictation");
   assert.deepEqual(calls.disconnects, [{ id: calls.connects[0].id, commit: false }]);
   assert.equal("language" in calls.connects[1].options, true);
@@ -203,8 +174,8 @@ test("a start redials when the warm connection was minted for another language",
 // waited on, so frames sent once the start is handled reach the new session.
 test("frames sent once a mismatch redial starts buffer into the new session, not the retiring one", async (t) => {
   const s = scenario(t);
-  await s.invoke("dictation-realtime-warmup", byok({ language: "en" }));
-  const started = s.invoke("dictation-realtime-start", byok({ language: "de" }));
+  await s.invoke("dictation-realtime-warmup", dictation({ language: "en" }));
+  const started = s.invoke("dictation-realtime-start", dictation({ language: "de" }));
   s.sendAudio();
   await started;
   const [warm, fresh] = calls.instances;
@@ -214,8 +185,8 @@ test("frames sent once a mismatch redial starts buffer into the new session, not
 
 test("a retiring warm session's late events never reach the renderer", async (t) => {
   const s = scenario(t);
-  await s.invoke("dictation-realtime-warmup", byok({ language: "en" }));
-  await s.invoke("dictation-realtime-start", byok({ language: "de" }));
+  await s.invoke("dictation-realtime-warmup", dictation({ language: "en" }));
+  await s.invoke("dictation-realtime-start", dictation({ language: "de" }));
   const [warm] = calls.instances;
   warm.onPartialTranscript?.("hel");
   warm.onFinalTranscript?.("hello");
@@ -224,26 +195,18 @@ test("a retiring warm session's late events never reach the renderer", async (t)
   assert.deepEqual(calls.sent, []);
 });
 
-test("a start redials when the warm connection was minted for another model", async (t) => {
+test("a start redials when the warm connection was opened for another word list", async (t) => {
   const s = scenario(t);
-  await s.invoke("dictation-realtime-warmup", byok({ model: "gpt-4o-mini-transcribe" }));
-  await s.invoke("dictation-realtime-start", byok({ model: "gpt-4o-transcribe" }));
+  await s.invoke("dictation-realtime-warmup", dictation({ keyterms: ["Voxtral"] }));
+  await s.invoke("dictation-realtime-start", dictation({ keyterms: ["Voxtral", "Luna"] }));
   assert.equal(calls.connects.length, 2);
-  assert.equal(calls.connects[1].options.model, "gpt-4o-transcribe");
-});
-
-test("a start redials when the warm connection belongs to another mode", async (t) => {
-  const s = scenario(t);
-  await s.invoke("dictation-realtime-warmup", byok({ mode: "openwhispr" }));
-  await s.invoke("dictation-realtime-start", byok({ mode: "byok" }));
-  assert.equal(calls.connects.length, 2);
-  assert.equal(calls.connects[1].options.preconfigured, false);
+  assert.deepEqual(calls.connects[1].options.keyterms, ["Voxtral", "Luna"]);
 });
 
 test("after stop, the next start dials fresh", async (t) => {
   const s = scenario(t);
-  await s.invoke("dictation-realtime-start", byok());
+  await s.invoke("dictation-realtime-start", dictation());
   await s.invoke("dictation-realtime-stop");
-  await s.invoke("dictation-realtime-start", byok());
+  await s.invoke("dictation-realtime-start", dictation());
   assert.equal(calls.connects.length, 2);
 });

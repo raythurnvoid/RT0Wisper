@@ -135,14 +135,6 @@ test("enterprise reasoning cancellation is forwarded to the main process", () =>
   assert.deepEqual(sends, [["enterprise-reasoning-cancel"]]);
 });
 
-test("cloud transcription cancellation is forwarded to the main process", () => {
-  const { api, sends } = loadPreloadApi();
-
-  api.cancelCloudTranscription();
-
-  assert.deepEqual(sends, [["cloud-transcribe-cancel"]]);
-});
-
 test("agent streaming listeners strip Electron events and preserve correlation", () => {
   const { api, listeners } = loadPreloadApi();
   const received = {};

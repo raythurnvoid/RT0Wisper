@@ -34,21 +34,21 @@ test("invalid completed cleanup keeps raw text across dictation routes", async (
     preferredLanguage: "en",
     dataRetentionEnabled: true,
   });
-  window.electronAPI.cloudTranscribe = async () => ({ success: true, text: RAW });
-  window.electronAPI.cloudStreamingUsage = async () => ({ success: true });
+  window.electronAPI.proxyMistralTranscription = async () => ({ text: RAW });
   const createManager = () =>
     Object.assign(Object.create(AudioManager.prototype), {
       voiceAgentRequested: false,
       translationRequested: false,
       pendingCleanupFailure: null,
       getEffectiveSttLanguage: () => "en",
+      getAPIKey: async () => "mk-mistral",
       getWhisperPrompt: () => null,
       isDictionaryEcho: () => false,
       isReasoningAvailable: async () => true,
       finalizeChineseScript: async (text) => text,
     });
 
-  for (const route of ["batch", "streaming", "byok-streaming", "translation"]) {
+  for (const route of ["batch", "streaming", "translation"]) {
     await t.test(
       `${route} Cloud cleanup snapshots its custom prompt and rejects duplicated output`,
       async () => {
@@ -66,12 +66,11 @@ test("invalid completed cleanup keeps raw text across dictation routes", async (
           const manager = createManager();
           let result;
           if (route === "batch") {
-            result = await manager.processWithOpenWhisprCloud(new Blob(["synthetic audio"]));
+            result = await manager.processWithOpenAIAPI(new Blob(["synthetic audio"]));
             result = { ...result, ...manager._takePendingResultExtras() };
             assert.equal(result.rawText, RAW);
-          } else if (route === "streaming" || route === "byok-streaming") {
+          } else if (route === "streaming") {
             Object.assign(manager, {
-              _streamingMeteredByCloud: route === "streaming",
               streamingFinalText: RAW,
               streamingCleanupFns: [],
               micRecovery: { stop() {} },
@@ -82,37 +81,15 @@ test("invalid completed cleanup keeps raw text across dictation routes", async (
                 awaitsFinalTranscript: true,
                 stop: async () => ({ success: true }),
               }),
-              getStreamingProviderName: () => "openwhispr",
+              getStreamingProviderName: () => "mistral-realtime",
               shouldUseStreaming: () => false,
               onTranscriptionComplete: (value) => {
                 result = value;
               },
             });
-            let usageOptions;
-            const usageEvents = [];
-            window.electronAPI.cloudStreamingUsage = async (text, seconds, options) => {
-              usageOptions = options;
-              return { success: true };
-            };
-            const dispatchEvent = window.dispatchEvent;
-            window.dispatchEvent = (event) => usageEvents.push(event.type);
-            try {
-              await manager._finalizeStreamingRecording(null);
-              await new Promise(setImmediate);
-            } finally {
-              window.dispatchEvent = dispatchEvent;
-            }
+            await manager._finalizeStreamingRecording(null);
+            await new Promise(setImmediate);
             assert.equal(result.rawText, RAW);
-            if (route === "streaming") {
-              // The successful /api/reason call already logged this dictation.
-              assert.equal(usageOptions?.sendLogs, false);
-              assert.deepEqual(usageEvents, ["usage-changed"]);
-            } else {
-              // Cloud cleanup records no words, so an own-key stream has no
-              // usage to report or refresh.
-              assert.equal(usageOptions, undefined);
-              assert.deepEqual(usageEvents, []);
-            }
           } else {
             let translationInput;
             manager.processWithReasoningModel = async (text) => {

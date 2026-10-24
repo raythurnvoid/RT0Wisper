@@ -35,7 +35,7 @@ test("dictation cleanup carries the tone for the app it was captured in", async 
     toneStyleEnabled: true,
     toneStyles: { personal: "very_casual", work: "casual", email: "excited", other: "formal" },
   });
-  window.electronAPI.cloudTranscribe = async () => ({ success: true, text: RAW });
+  window.electronAPI.proxyMistralTranscription = async () => ({ text: RAW });
   let capturedCategory;
   window.electronAPI.captureDictationAppCategory = async () => capturedCategory;
   const reasonRequests = [];
@@ -49,6 +49,7 @@ test("dictation cleanup carries the tone for the app it was captured in", async 
       translationRequested: false,
       pendingCleanupFailure: null,
       getEffectiveSttLanguage: () => "en",
+      getAPIKey: async () => "mk-mistral",
       getWhisperPrompt: () => null,
       isDictionaryEcho: () => false,
       isReasoningAvailable: async () => true,
@@ -56,18 +57,17 @@ test("dictation cleanup carries the tone for the app it was captured in", async 
     });
   const lastRequest = () => reasonRequests[reasonRequests.length - 1];
 
-  await t.test("Cloud batch cleanup sends the captured app's tone", async () => {
+  await t.test("batch Cloud cleanup sends the captured app's tone", async () => {
     capturedCategory = "personal";
     const manager = createManager();
     manager.beginToneStyleCapture();
-    await manager.processWithOpenWhisprCloud(new Blob(["synthetic audio"]));
+    await manager.processWithOpenAIAPI(new Blob(["synthetic audio"]));
     assert.equal(lastRequest().tone, "very_casual");
     assert.equal(lastRequest().appCategory, "personal");
   });
 
   await t.test("streaming Cloud cleanup sends the captured app's tone", async () => {
     capturedCategory = "email";
-    window.electronAPI.cloudStreamingUsage = async () => ({ success: true });
     const manager = Object.assign(createManager(), {
       streamingFinalText: RAW,
       streamingCleanupFns: [],
@@ -79,7 +79,7 @@ test("dictation cleanup carries the tone for the app it was captured in", async 
         awaitsFinalTranscript: true,
         stop: async () => ({ success: true }),
       }),
-      getStreamingProviderName: () => "openwhispr",
+      getStreamingProviderName: () => "mistral-realtime",
       shouldUseStreaming: () => false,
       onTranscriptionComplete: () => {},
     });
@@ -93,20 +93,20 @@ test("dictation cleanup carries the tone for the app it was captured in", async 
     capturedCategory = null;
     const manager = createManager();
     manager.beginToneStyleCapture();
-    await manager.processWithOpenWhisprCloud(new Blob(["synthetic audio"]));
+    await manager.processWithOpenAIAPI(new Blob(["synthetic audio"]));
     assert.equal(lastRequest().tone, "formal");
     assert.equal(lastRequest().appCategory, "other");
   });
 
   await t.test("no tone without a capture, or once Tone & Style is off", async () => {
     capturedCategory = "email";
-    await createManager().processWithOpenWhisprCloud(new Blob(["synthetic audio"]));
+    await createManager().processWithOpenAIAPI(new Blob(["synthetic audio"]));
     assert.equal("tone" in lastRequest(), false);
 
     const manager = createManager();
     manager.beginToneStyleCapture();
     useSettingsStore.setState({ toneStyleEnabled: false });
-    await manager.processWithOpenWhisprCloud(new Blob(["synthetic audio"]));
+    await manager.processWithOpenAIAPI(new Blob(["synthetic audio"]));
     useSettingsStore.setState({ toneStyleEnabled: true });
     assert.equal("tone" in lastRequest(), false);
   });
@@ -122,15 +122,19 @@ test("dictation cleanup carries the tone for the app it was captured in", async 
     assert.deepEqual(await manager.consumeToneStyle(), { appCategory: "email", tone: "excited" });
   });
 
-  await t.test("a cancelled upload that still resolves leaves the next dictation's tone alone", async () => {
-    capturedCategory = "work";
-    const manager = createManager();
-    // The next dictation started while the cancelled one's upload was in flight.
-    manager.beginToneStyleCapture();
-    await manager.processWithOpenWhisprCloud(new Blob(["synthetic audio"]), {}, () => true);
-    assert.equal("tone" in lastRequest(), false);
-    assert.deepEqual(await manager.consumeToneStyle(), { appCategory: "work", tone: "casual" });
-  });
+  await t.test(
+    "a cancelled transcription that still resolves leaves the next dictation's tone alone",
+    async () => {
+      capturedCategory = "work";
+      const manager = createManager();
+      // The next dictation started while the cancelled one's request was in flight.
+      manager.beginToneStyleCapture();
+      const requestsBefore = reasonRequests.length;
+      await manager.processWithOpenAIAPI(new Blob(["synthetic audio"]), {}, () => true);
+      assert.equal(reasonRequests.length, requestsBefore, "a cancelled dictation sends no cleanup");
+      assert.deepEqual(await manager.consumeToneStyle(), { appCategory: "work", tone: "casual" });
+    }
+  );
 
   await t.test("a new recording drops the previous recording's capture", async () => {
     capturedCategory = "work";

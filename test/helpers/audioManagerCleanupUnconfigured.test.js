@@ -110,15 +110,14 @@ test("a BYOK cleanup model with no API key reports the missing key", async (t) =
   assert.equal(await dictate(manager, "local model words"), undefined);
 });
 
-test("the Cloud batch and streaming paths warn when they skip an unreachable cleanup", async (t) => {
-  const { window, manager, setSettings } = await loadRealAudioManager(t);
-  // Signed in for Cloud transcription, with cleanup set to providers and no model.
-  setSettings({ isSignedIn: true, cleanupCloudMode: "openwhispr" });
-  window.electronAPI.cloudTranscribe = async () => ({ success: true, text: "cloud words" });
-  window.electronAPI.cloudStreamingUsage = async () => ({ success: true });
+test("the batch and streaming paths warn when they skip an unreachable cleanup", async (t) => {
+  const { window, manager } = await loadRealAudioManager(t);
+  // Cleanup is set to providers with no model.
+  window.electronAPI.proxyMistralTranscription = async () => ({ text: "mistral words" });
+  manager.getAPIKey = async () => "mk-mistral";
 
-  const batch = await manager.processWithOpenWhisprCloud(new Blob(["synthetic audio"]));
-  assert.equal(batch.text, "cloud words");
+  const batch = await manager.processWithOpenAIAPI(new Blob(["synthetic audio"]));
+  assert.equal(batch.text, "mistral words");
   assert.equal(manager._takePendingResultExtras().cleanupFailure?.messageKey, UNCONFIGURED);
 
   let streamed;
@@ -133,7 +132,7 @@ test("the Cloud batch and streaming paths warn when they skip an unreachable cle
       awaitsFinalTranscript: true,
       stop: async () => ({ success: true }),
     }),
-    getStreamingProviderName: () => "openwhispr",
+    getStreamingProviderName: () => "mistral-realtime",
     shouldUseStreaming: () => false,
     onTranscriptionComplete: (value) => {
       streamed = value;

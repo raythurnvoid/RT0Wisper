@@ -44,7 +44,6 @@ import { pickDefaultModelId } from "../models/providerDefaultModel";
 import { readCachedTinfoilModels } from "../models/tinfoilModelCache";
 import { recordRetiredModelSwitch } from "./retiredModelSwitchStore";
 import { MEETING_STREAMING_PROVIDER_IDS } from "../helpers/meetingTranscriptionRouting";
-import { STREAMING_ONLY_PROVIDERS } from "../helpers/transcriptionRoute";
 import {
   getTranscriptionSelection,
   isScreenContextAllowed,
@@ -2813,56 +2812,6 @@ export const selectResolvedMeetingTranscription = (
   remoteTranscriptionType: state.meetingRemoteTranscriptionType,
   remoteTranscriptionUrl: state.meetingRemoteTranscriptionUrl || state.remoteTranscriptionUrl,
 });
-
-export interface ResolvedUploadTranscription {
-  useLocalWhisper: boolean;
-  whisperModel: string;
-  localTranscriptionProvider: LocalTranscriptionProvider;
-  parakeetModel: string;
-  cohereModel: string;
-  cloudTranscriptionProvider: string;
-  cloudTranscriptionModel: string;
-  cloudTranscriptionBaseUrl: string;
-  cloudTranscriptionMode: string;
-  transcriptionMode: InferenceMode;
-  remoteTranscriptionUrl: string;
-  remoteTranscriptionModel: string;
-}
-
-// Audio upload is batch (not streaming), so unset values fall back to the base
-// dictation settings — matching the behavior before upload had its own context.
-// A realtime-only dictation provider is the exception: it has no batch route, so
-// inheriting it would fail every upload closed. Uploads take the default provider
-// instead, and the dictation model stays behind with the provider it belongs to.
-// The self-hosted server is the exception the other way: it never inherits, so
-// uploads go only to the server the Upload tab shows (#2049).
-// migrateUploadSelfHosted() seeds it once for profiles from before the tab had its own.
-export const selectResolvedUploadTranscription = (
-  state: SettingsState
-): ResolvedUploadTranscription => {
-  const inheritsDictationProvider = !STREAMING_ONLY_PROVIDERS.has(state.cloudTranscriptionProvider);
-  return {
-    useLocalWhisper: state.uploadUseLocalWhisper,
-    whisperModel: state.uploadWhisperModel || state.whisperModel,
-    localTranscriptionProvider: state.uploadLocalTranscriptionProvider,
-    parakeetModel: state.uploadParakeetModel || state.parakeetModel,
-    cohereModel: state.uploadCohereModel || state.cohereModel,
-    cloudTranscriptionProvider:
-      state.uploadCloudTranscriptionProvider ||
-      (inheritsDictationProvider
-        ? state.cloudTranscriptionProvider
-        : DEFAULT_CLOUD_TRANSCRIPTION_PROVIDER),
-    cloudTranscriptionModel:
-      state.uploadCloudTranscriptionModel ||
-      (inheritsDictationProvider ? state.cloudTranscriptionModel : ""),
-    cloudTranscriptionBaseUrl:
-      state.uploadCloudTranscriptionBaseUrl || state.cloudTranscriptionBaseUrl || "",
-    cloudTranscriptionMode: state.uploadCloudTranscriptionMode || state.cloudTranscriptionMode,
-    transcriptionMode: state.uploadTranscriptionMode,
-    remoteTranscriptionUrl: state.uploadRemoteTranscriptionUrl,
-    remoteTranscriptionModel: state.uploadRemoteTranscriptionModel,
-  };
-};
 
 export interface ResolvedNoteFormatting {
   provider: string;

@@ -8,13 +8,11 @@ import { expandSnippets } from "../utils/snippets";
 import { getRecordingErrorTitle, getRecordingErrorDescription } from "../utils/recordingErrors";
 import { providerErrorActions } from "../utils/describeProviderError";
 import { isAccessibilitySkipped } from "../utils/permissions";
-import { needsSttConfigBeforeStart } from "../helpers/sttConfigPolicy";
 import {
   isAgentAllowed,
   isScreenContextAllowed,
   isTranscriptionContextAllowed,
 } from "../stores/policyRules";
-import { isManagedTranscriptionActive } from "../services/managedTranscription";
 import { usePolicyStore } from "../stores/policyStore";
 import { getOnboardingDemoKind } from "../utils/onboardingDemo";
 import {
@@ -150,8 +148,7 @@ export const useAudioRecording = (toast, options = {}) => {
         if (!audioManagerRef.current) return false;
         const policyState = usePolicyStore.getState();
         if (
-          (!isManagedTranscriptionActive() &&
-            !isTranscriptionContextAllowed(policyState, getSettings(), "dictation")) ||
+          !isTranscriptionContextAllowed(policyState, getSettings(), "dictation") ||
           (voiceAgentRequested && !isAgentAllowed(policyState))
         ) {
           toast({ title: t("common.managedByOrg"), variant: "default" });
@@ -232,28 +229,6 @@ export const useAudioRecording = (toast, options = {}) => {
         // the connect. It does nothing when not signed in with ChatGPT.
         if (getSettings().useCleanupModel && getSettings().cleanupProvider === "openai") {
           window.electronAPI?.chatgptSocketWarmup?.();
-        }
-
-        // Retry STT config fetch if it wasn't loaded on mount (e.g. auth wasn't ready),
-        // and refresh a copy older than its TTL so a server-side rollout change
-        // reaches a long-running app. Await it only when it can change the start
-        // decision (no config yet, signed-in OpenWhispr-cloud streaming); for
-        // local STT or a signed-out session the fetch stalls on auth resolution
-        // and would delay the mic open (#1673). A stale-but-present copy is
-        // refreshed in the background and this recording keeps the old decision.
-        if (audioManagerRef.current.isSttConfigStale()) {
-          const hadConfig = Boolean(audioManagerRef.current.sttConfig);
-          const configFetch = (async () => {
-            const config = await window.electronAPI.getSttConfig?.();
-            if (config?.success) {
-              audioManagerRef.current.setSttConfig(config);
-            }
-          })().catch((error) => {
-            logger.warn("STT config fetch failed", { error: error?.message });
-          });
-          if (!hadConfig && needsSttConfigBeforeStart(getSettings())) {
-            await configFetch;
-          }
         }
 
         const didStart = audioManagerRef.current.shouldUseStreaming()
@@ -1007,14 +982,6 @@ export const useAudioRecording = (toast, options = {}) => {
     // re-sync overlay content protection when it does.
     const unsubscribePolicy = usePolicyStore.subscribe(() => {
       window.electronAPI.setScreenContextEnabled?.(getSettings().voiceAgentScreenContext);
-    });
-    window.electronAPI.getSttConfig?.().then((config) => {
-      if (config?.success && audioManagerRef.current) {
-        audioManagerRef.current.setSttConfig(config);
-        if (audioManagerRef.current.shouldUseStreaming()) {
-          audioManagerRef.current.warmupStreamingConnection();
-        }
-      }
     });
 
     const handleToggle = async ({

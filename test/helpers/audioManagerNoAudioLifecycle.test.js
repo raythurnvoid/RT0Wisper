@@ -28,9 +28,6 @@ function createManager(AudioManager, failure) {
     processWithOpenAIAPI: async () => {
       throw failure;
     },
-    processWithOpenWhisprCloud: async () => {
-      throw failure;
-    },
     onStateChange: (state) => order.push(state.isProcessing ? "processing" : "idle"),
     onNoAudio: () => order.push("no-audio"),
     onError: () => order.push("error"),

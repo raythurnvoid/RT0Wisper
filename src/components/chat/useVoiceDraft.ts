@@ -1,14 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAuth } from "../../hooks/useAuth";
-import { useSettings } from "../../hooks/useSettings";
 import { useSettingsStore } from "../../stores/settingsStore";
-import { getBaseLanguageCode } from "../../utils/languageSupport";
-import {
-  transcribeFile,
-  getTranscriptionApiKey,
-  resolveFileTranscriptionRoute,
-  type FileTranscriptionConfig,
-} from "../../services/fileTranscription";
 import { analyserRms } from "../../utils/audioLevel";
 
 export type VoiceDraftStatus = "idle" | "recording" | "transcribing";
@@ -19,25 +10,11 @@ interface UseVoiceDraftOptions {
 }
 
 /**
- * Records a mic take in the chat input and runs it through the regular
- * transcription pipeline (all providers, no LLM pass). The transcript is
+ * Records a mic take in the chat input and sends it to Mistral (no LLM pass). The transcript is
  * handed back for the caller to place into the input.
  */
 export function useVoiceDraft({ onTranscript, onError }: UseVoiceDraftOptions) {
-  const { isSignedIn } = useAuth();
-  const settings = useSettings();
-  const {
-    cloudTranscriptionMode,
-    cloudTranscriptionProvider,
-    cloudTranscriptionBaseUrl,
-    cloudTranscriptionModel,
-    preferredLanguage,
-    transcriptionMode,
-    remoteTranscriptionUrl,
-    remoteTranscriptionModel,
-  } = settings;
-  const cortiEnvironment = useSettingsStore((s) => s.cortiEnvironment);
-  const cortiTenant = useSettingsStore((s) => s.cortiTenant);
+  const cloudTranscriptionModel = useSettingsStore((s) => s.cloudTranscriptionModel);
 
   const [status, setStatus] = useState<VoiceDraftStatus>("idle");
   const [elapsed, setElapsed] = useState(0);
@@ -50,33 +27,10 @@ export function useVoiceDraft({ onTranscript, onError }: UseVoiceDraftOptions) {
   const chunksRef = useRef<Blob[]>([]);
   const discardRef = useRef(false);
 
-  const buildConfig = (): FileTranscriptionConfig => ({
-    isOpenWhisprCloud: isSignedIn && cloudTranscriptionMode === "openwhispr",
-    getApiKey: () => getTranscriptionApiKey(cloudTranscriptionProvider as string, settings),
-    cloudTranscriptionProvider: cloudTranscriptionProvider as string,
-    cloudTranscriptionBaseUrl: cloudTranscriptionBaseUrl || "",
-    cloudTranscriptionModel,
-    // Empty = auto-detect; the resolver supplies a default where one is required.
-    language: getBaseLanguageCode(preferredLanguage) || "",
-    cortiEnvironment,
-    cortiTenant,
-    transcriptionMode,
-    remoteTranscriptionUrl,
-    remoteTranscriptionModel,
-  });
-
-  // The chat mic always takes the batch file path, which a realtime-only
-  // provider cannot serve; the caller disables the mic rather than letting a
-  // take record straight into that failure.
-  const config = buildConfig();
-  const route = config.isOpenWhisprCloud ? null : resolveFileTranscriptionRoute(config);
-  const streamingOnlyProvider =
-    route?.transport === "error" && route.code === "STREAMING_ONLY_PROVIDER";
-
   // Latest-value refs so the recorder's onstop (bound at start time) uses
   // current settings and callbacks.
-  const buildConfigRef = useRef(buildConfig);
-  buildConfigRef.current = buildConfig;
+  const modelRef = useRef(cloudTranscriptionModel);
+  modelRef.current = cloudTranscriptionModel;
   const onTranscriptRef = useRef(onTranscript);
   onTranscriptRef.current = onTranscript;
   const onErrorRef = useRef(onError);
@@ -120,7 +74,10 @@ export function useVoiceDraft({ onTranscript, onError }: UseVoiceDraftOptions) {
       const buffer = await blob.arrayBuffer();
       const saved = await window.electronAPI.saveTempAudio(buffer);
       tempPath = saved.path;
-      const result = await transcribeFile(tempPath, buildConfigRef.current(), false);
+      const result = await window.electronAPI.transcribeAudioFileByok!({
+        filePath: tempPath,
+        model: modelRef.current,
+      });
       const text = result.text?.trim();
       if (!result.success || !text) {
         onErrorRef.current(result.error || "");
@@ -189,5 +146,5 @@ export function useVoiceDraft({ onTranscript, onError }: UseVoiceDraftOptions) {
     []
   );
 
-  return { status, elapsed, readLevel, start, stop, cancel, streamingOnlyProvider };
+  return { status, elapsed, readLevel, start, stop, cancel };
 }
