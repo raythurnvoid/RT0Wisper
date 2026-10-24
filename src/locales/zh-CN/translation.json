@@ -2020,7 +2020,9 @@
       },
       "microphone": {
         "description": "选择用于听写的输入设备",
-        "title": "麦克风"
+        "title": "麦克风",
+        "muteOtherApps": "听写时静音其他应用",
+        "muteOtherAppsDescription": "将其他应用的声音静音，以免干扰听写"
       },
       "soundEffects": {
         "dictationSounds": "听写音效",

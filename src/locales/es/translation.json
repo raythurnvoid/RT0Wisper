@@ -2072,7 +2072,9 @@
       },
       "microphone": {
         "description": "Selecciona qué dispositivo de entrada usar para dictado",
-        "title": "Micrófono"
+        "title": "Micrófono",
+        "muteOtherApps": "Silenciar otras apps al dictar",
+        "muteOtherAppsDescription": "Silencia el sonido de otras apps para que no interfiera con tu dictado"
       },
       "soundEffects": {
         "dictationSounds": "Sonidos de dictado",

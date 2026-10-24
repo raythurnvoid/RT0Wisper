@@ -428,6 +428,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   setScreenContextEnabled: (enabled) => ipcRenderer.invoke("screen-context-set-enabled", enabled),
   pauseMediaPlayback: () => ipcRenderer.invoke("pause-media-playback"),
   resumeMediaPlayback: () => ipcRenderer.invoke("resume-media-playback"),
+  muteOtherApps: () => ipcRenderer.invoke("mute-other-apps"),
+  unmuteOtherApps: () => ipcRenderer.invoke("unmute-other-apps"),
   authClearSession: () => ipcRenderer.invoke("auth-clear-session"),
   authGetTokenState: () => ipcRenderer.invoke("auth-get-token-state"),
   authSetToken: (token, expectedGeneration) =>

@@ -245,6 +245,8 @@ export default function SettingsPage({
     setAutoLearnCorrections,
     floatingIconAutoHide,
     setFloatingIconAutoHide,
+    muteAppsOnDictation,
+    setMuteAppsOnDictation,
   } = useSettings();
 
   const voiceAgentKey = useSettingsStore((s) => s.voiceAgentKey);
@@ -415,6 +417,17 @@ export default function SettingsPage({
                     onMicWarmHoldSecondsChange={setMicWarmHoldSeconds}
                   />
                 </SettingsPanelRow>
+                {/* Muting uses Windows audio sessions, so other platforms skip it. */}
+                {platform === "win32" && (
+                  <SettingsPanelRow>
+                    <SettingsRow
+                      label={t("settingsPage.general.microphone.muteOtherApps")}
+                      description={t("settingsPage.general.microphone.muteOtherAppsDescription")}
+                    >
+                      <Toggle checked={muteAppsOnDictation} onChange={setMuteAppsOnDictation} />
+                    </SettingsRow>
+                  </SettingsPanelRow>
+                )}
               </SettingsPanel>
             </div>
 

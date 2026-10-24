@@ -383,6 +383,8 @@ function useSettingsInternal() {
     setActivationMode: store.setActivationMode,
     audioCuesEnabled: store.audioCuesEnabled,
     pauseMediaOnDictation: store.pauseMediaOnDictation,
+    muteAppsOnDictation: store.muteAppsOnDictation,
+    setMuteAppsOnDictation: store.setMuteAppsOnDictation,
     floatingIconAutoHide: store.floatingIconAutoHide,
     setFloatingIconAutoHide: store.setFloatingIconAutoHide,
     startMinimized: store.startMinimized,

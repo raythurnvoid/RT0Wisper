@@ -1227,6 +1227,8 @@ declare global {
       setScreenContextEnabled?: (enabled: boolean) => Promise<{ success: boolean }>;
       pauseMediaPlayback?: () => Promise<boolean>;
       resumeMediaPlayback?: () => Promise<boolean>;
+      muteOtherApps?: () => Promise<boolean>;
+      unmuteOtherApps?: () => Promise<boolean>;
 
       // Windows Push-to-Talk notifications
       notifyActivationModeChanged?: (mode: "tap" | "push") => void;

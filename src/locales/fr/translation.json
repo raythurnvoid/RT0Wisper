@@ -2314,7 +2314,9 @@
       },
       "microphone": {
         "description": "Sélectionnez le périphérique d'entrée à utiliser pour la dictée",
-        "title": "Microphone"
+        "title": "Microphone",
+        "muteOtherApps": "Couper le son des autres apps pendant la dictée",
+        "muteOtherAppsDescription": "Coupe le son des autres apps pour qu'il ne gêne pas votre dictée"
       },
       "soundEffects": {
         "dictationSounds": "Sons de dictée",

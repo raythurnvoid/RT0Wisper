@@ -1999,7 +1999,9 @@
       },
       "microphone": {
         "description": "Selecione qual dispositivo de entrada usar para ditado",
-        "title": "Microfone"
+        "title": "Microfone",
+        "muteOtherApps": "Silenciar outros apps ao ditar",
+        "muteOtherAppsDescription": "Silencia o som de outros apps para não atrapalhar o seu ditado"
       },
       "soundEffects": {
         "dictationSounds": "Sons de ditado",

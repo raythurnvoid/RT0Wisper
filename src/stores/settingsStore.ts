@@ -278,6 +278,7 @@ const BOOLEAN_SETTINGS = new Set([
   "telemetryEnabled",
   "audioCuesEnabled",
   "pauseMediaOnDictation",
+  "muteAppsOnDictation",
   "floatingIconAutoHide",
   "startMinimized",
   "meetingProcessDetection",
@@ -862,6 +863,7 @@ export interface SettingsState
   isSignedIn: boolean;
   audioCuesEnabled: boolean;
   pauseMediaOnDictation: boolean;
+  muteAppsOnDictation: boolean;
   floatingIconAutoHide: boolean;
   startMinimized: boolean;
   gcalAccounts: CalendarAccount[];
@@ -1079,6 +1081,7 @@ export interface SettingsState
 
   setTheme: (value: "light" | "dark" | "auto") => void;
   setFloatingIconAutoHide: (enabled: boolean) => void;
+  setMuteAppsOnDictation: (value: boolean) => void;
   setSpeakerDiarizationEnabled: (value: boolean) => void;
   setPanelStartPosition: (position: "bottom-right" | "center" | "bottom-left") => void;
   setShowTranscriptionPreview: (value: boolean) => void;
@@ -1442,6 +1445,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   saveDiscardedTranscriptions: readBoolean("saveDiscardedTranscriptions", false),
   audioCuesEnabled: readBoolean("audioCuesEnabled", true),
   pauseMediaOnDictation: readBoolean("pauseMediaOnDictation", false),
+  muteAppsOnDictation: readBoolean("muteAppsOnDictation", true),
   // RT0Wisper shows the pill only while dictating unless "Always visible" is on.
   floatingIconAutoHide: readBoolean("floatingIconAutoHide", true),
   startMinimized: readBoolean("startMinimized", false),
@@ -2007,6 +2011,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
       window.electronAPI?.notifyFloatingIconAutoHideChanged?.(enabled);
     }
   },
+  setMuteAppsOnDictation: createBooleanSetter("muteAppsOnDictation"),
   setSpeakerDiarizationEnabled: (value: boolean) => {
     if (isBrowser) localStorage.setItem("speakerDiarizationEnabled", String(value));
     useSettingsStore.setState({ speakerDiarizationEnabled: value });

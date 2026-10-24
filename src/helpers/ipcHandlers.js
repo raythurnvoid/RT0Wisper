@@ -2727,6 +2727,16 @@ class IPCHandlers {
       return mediaPlayer.resumeMedia();
     });
 
+    ipcMain.handle("mute-other-apps", () => {
+      const appAudioMuter = require("./appAudioMuter");
+      return appAudioMuter.mute();
+    });
+
+    ipcMain.handle("unmute-other-apps", () => {
+      const appAudioMuter = require("./appAudioMuter");
+      return appAudioMuter.unmute();
+    });
+
     ipcMain.handle("request-microphone-access", async () => {
       if (process.platform !== "darwin") {
         return { granted: true, status: "granted" };

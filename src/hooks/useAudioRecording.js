@@ -257,6 +257,9 @@ export const useAudioRecording = (toast, options = {}) => {
           if (getSettings().pauseMediaOnDictation) {
             window.electronAPI?.pauseMediaPlayback?.();
           }
+          if (getSettings().muteAppsOnDictation) {
+            window.electronAPI?.muteOtherApps?.();
+          }
           window.electronAPI?.registerCancelHotkey?.("Escape");
           void playStartCue();
         }
@@ -503,6 +506,9 @@ export const useAudioRecording = (toast, options = {}) => {
           if (wasRecordingRef.current && getSettings().pauseMediaOnDictation) {
             window.electronAPI?.resumeMediaPlayback?.();
           }
+          // Not gated on the setting: turning it off mid-dictation must still
+          // unmute. It is a no-op when nothing was muted.
+          if (wasRecordingRef.current) window.electronAPI?.unmuteOtherApps?.();
         }
         wasRecordingRef.current = isRecording;
         setIsRecording(isRecording);
@@ -571,6 +577,7 @@ export const useAudioRecording = (toast, options = {}) => {
         if (getSettings().pauseMediaOnDictation) {
           window.electronAPI?.resumeMediaPlayback?.();
         }
+        window.electronAPI?.unmuteOtherApps?.();
       },
       onNoAudio: () => {
         setIsPreparing(false);
@@ -584,6 +591,7 @@ export const useAudioRecording = (toast, options = {}) => {
         if (getSettings().pauseMediaOnDictation) {
           window.electronAPI?.resumeMediaPlayback?.();
         }
+        window.electronAPI?.unmuteOtherApps?.();
         showDictationError({
           title: t("hooks.audioRecording.noAudio.title"),
           description: t("hooks.audioRecording.noAudio.description"),
@@ -1072,6 +1080,7 @@ export const useAudioRecording = (toast, options = {}) => {
       if (getSettings().pauseMediaOnDictation) {
         window.electronAPI?.resumeMediaPlayback?.();
       }
+      window.electronAPI?.unmuteOtherApps?.();
       // A streaming start in its mic-open phase is not yet `isStreaming`;
       // only the streaming cancel knows how to abandon it.
       if (state.isStreaming || state.isStreamingStartInProgress) {

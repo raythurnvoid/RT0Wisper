@@ -2020,7 +2020,9 @@
       },
       "microphone": {
         "description": "選擇用於語音輸入的輸入裝置",
-        "title": "麥克風"
+        "title": "麥克風",
+        "muteOtherApps": "語音輸入時將其他應用程式靜音",
+        "muteOtherAppsDescription": "將其他應用程式的聲音靜音，以免干擾語音輸入"
       },
       "soundEffects": {
         "dictationSounds": "語音輸入音效",

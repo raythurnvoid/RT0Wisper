@@ -2020,7 +2020,9 @@
       },
       "microphone": {
         "description": "ディクテーションに使用する入力デバイスを選択",
-        "title": "マイク"
+        "title": "マイク",
+        "muteOtherApps": "ディクテーション中に他のアプリをミュート",
+        "muteOtherAppsDescription": "他のアプリの音をミュートして、ディクテーションの邪魔にならないようにします"
       },
       "soundEffects": {
         "dictationSounds": "ディクテーション音",

@@ -2314,7 +2314,9 @@
       },
       "microphone": {
         "description": "Wählen Sie das Eingabegerät für das Diktat",
-        "title": "Mikrofon"
+        "title": "Mikrofon",
+        "muteOtherApps": "Andere Apps beim Diktieren stummschalten",
+        "muteOtherAppsDescription": "Ton anderer Apps ausschalten, damit er Ihr Diktat nicht stört"
       },
       "soundEffects": {
         "dictationSounds": "Diktat-Signaltöne",

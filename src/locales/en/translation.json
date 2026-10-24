@@ -2314,7 +2314,9 @@
       },
       "microphone": {
         "description": "Select which input device to use for dictation",
-        "title": "Microphone"
+        "title": "Microphone",
+        "muteOtherApps": "Mute other apps while dictating",
+        "muteOtherAppsDescription": "Silence sound from other apps so it does not get into your dictation"
       },
       "soundEffects": {
         "dictationSounds": "Dictation sounds",

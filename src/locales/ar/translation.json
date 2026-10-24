@@ -3675,7 +3675,9 @@
       },
       "microphone": {
         "description": "حدد جهاز الإدخال الذي تريد استخدامه للإملاء",
-        "title": "الميكروفون"
+        "title": "الميكروفون",
+        "muteOtherApps": "كتم صوت التطبيقات الأخرى أثناء الإملاء",
+        "muteOtherAppsDescription": "كتم صوت التطبيقات الأخرى حتى لا يتداخل مع الإملاء"
       },
       "soundEffects": {
         "dictationSounds": "أصوات الإملاء",
